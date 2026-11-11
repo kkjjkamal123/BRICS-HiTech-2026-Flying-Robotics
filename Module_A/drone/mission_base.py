@@ -463,7 +463,7 @@ class Mission(object):
             self._frames_csv.write("file,camera,t,x,y,z,yaw\n")
             with open(os.path.join(d, "camera_K.json"), "w") as fk:
                 json.dump({k: [list(map(float, r)) for r in c.K] for k, c in self.cameras.items()}, fk)
-            with open(os.path.join(d, "camera_meta.json"), "w") as fm:     # for analysis/weed_map.py --survey
+            with open(os.path.join(d, "camera_meta.json"), "w") as fm:     # camera geometry, for re-analysis of the frames
                 json.dump({k: {"image_up_is_forward": bool(getattr(c, "image_up_is_forward", True)),
                                "ground_z": float(getattr(c, "ground_z", 0.0)),
                                "orientation": getattr(c, "orientation", "down")} for k, c in self.cameras.items()}, fm)

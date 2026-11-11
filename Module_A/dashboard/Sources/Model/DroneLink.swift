@@ -82,7 +82,7 @@ struct DroneLink {
     @discardableResult
     func launchMission(settings extra: [String] = []) -> ProcessJob {
         let quoted = extra.map { "'\($0.replacingOccurrences(of: "'", with: ""))'" }.joined(separator: " ")
-        let job = run("Case 1 mission (drone)", remote: "\(Self.rosEnv); cd ~/brics_toolkit && if [ ! -f tools/run_mission.sh ] || [ ! -f common/mission_settings.py ]; then echo 'OLD MISSION CODE ON THE DRONE - press Deploy toolkit to drone (Flight Tests page), then Run mission again. Nothing was flown.'; exit 3; fi; echo $$ > /tmp/brics_job.pid; exec bash tools/run_mission.sh \(quoted)")
+        let job = run("Case 1 mission (drone)", remote: "\(Self.rosEnv); cd ~/brics_toolkit && if [ ! -f tools/run_mission.sh ] || [ ! -f common/mission_settings.py ]; then echo 'OLD MISSION CODE ON THE DRONE - in the dashboard open Flight Tests, click the Drone menu (top right), choose Deploy full toolkit, wait for it to finish, then Run mission again. Nothing was flown.'; exit 3; fi; echo $$ > /tmp/brics_job.pid; exec bash tools/run_mission.sh \(quoted)")
         attachRemoteStop(job)
         return job
     }
@@ -106,11 +106,18 @@ struct DroneLink {
                     workingDirectory: toolkit, environment: sshEnv.merging(["DRONE": settings.droneHost, "DUSER": settings.sshUser]) { _, new in new })
     }
 
-    func fetchResults(toolkit: URL) {
+    /// Mission runs and flight-test logs from the drone -> toolkit/runs -> ~/Desktop/BRICS Mission Logs.
+    /// rsync copies only what is new, so this is quick after every flight.
+    @discardableResult
+    func fetchResults(toolkit: URL, title: String = "Copy flight logs from drone") -> ProcessJob {
         let dest = toolkit.appending(path: "runs").path(percentEncoded: false)
-        console.run(title: "Copy flight logs from drone", executable: URL(filePath: "/bin/bash"),
-                    arguments: ["-c", "mkdir -p '\(dest)/flight_logs' && scp \(sshOptions.joined(separator: " ")) -r '\(settings.sshTarget):~/flight_logs/*' '\(dest)/flight_logs/' ; scp \(sshOptions.joined(separator: " ")) -r '\(settings.sshTarget):~/brics_toolkit/runs/*' '\(dest)/' 2>/dev/null; echo done"],
-                    environment: sshEnv)
+        let ssh = "ssh \(sshOptions.joined(separator: " "))"
+        let target: String = settings.sshTarget
+        let logs: String = "mkdir -p '\(dest)/flight_logs' && /usr/bin/rsync -a -e \"\(ssh)\" '\(target):flight_logs/' '\(dest)/flight_logs/'"
+        let runs: String = "/usr/bin/rsync -a -e \"\(ssh)\" --exclude '*_mock' '\(target):brics_toolkit/runs/' '\(dest)/'"
+        let mirror: String = MissionLogArchive.mirrorCommand(runsDir: dest)
+        let script: String = [logs, runs, mirror].joined(separator: " ; ")
+        return console.run(title: title, executable: URL(filePath: "/bin/bash"), arguments: ["-c", script], environment: sshEnv)
     }
 
     func syncClock() {

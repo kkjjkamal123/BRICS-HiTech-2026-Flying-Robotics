@@ -386,11 +386,18 @@ class ExGDetector(object):
     or to auto-label plants before training a weed-vs-crop model.
     """
 
-    def __init__(self, min_area=60, max_area=None, label="plant", name="exg", fixed_threshold=None):
+    def __init__(self, min_area=60, max_area=None, label="plant", name="exg", fixed_threshold=None, min_excess=None):
         self.min_area, self.max_area, self.label, self.source = min_area, max_area, label, name
         self.fixed = fixed_threshold
+        self.min_excess = min_excess     # absolute: 2G - R - B >= this (0..255 scale). Needed when a picture may have NO
+                                         # green at all - the per-picture threshold would then call the greenest noise a plant
 
     def mask(self, img):
+        if self.min_excess is not None:
+            i = img.astype(np.int16)
+            exg = 2 * i[:, :, 1] - i[:, :, 0] - i[:, :, 2]
+            m = (exg >= int(self.min_excess)).astype(np.uint8) * 255
+            return cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
         f = img.astype(np.float32) + 1e-6
         s = f.sum(2)
         b, g, r = f[:, :, 0] / s, f[:, :, 1] / s, f[:, :, 2] / s

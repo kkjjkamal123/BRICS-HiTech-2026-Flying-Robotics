@@ -2,7 +2,8 @@
 """Rehearsal of the final Case 1 mission in the simulator, with the venue layout (ONE heat source on the left,
 ONE flame lamp on the right) and deliberately WRONG camera calibrations, as on the real drone.
 
-Pass = every scenario maps exactly one `fire` and one `flame`, each within 0.5 m of the truth, and nothing else.
+Pass = every scenario maps exactly one `fire`, one `flame` and one `tree`, each within 0.5 m of the truth, nothing else,
+raises exactly two alarms (fire, flame; a tree is mapped without an alarm) and saves snapshots from both cameras.
     python tests/sim_case1_venue.py            (about 1 minute)
 """
 import glob, json, math, os, subprocess, sys, tempfile
@@ -10,7 +11,7 @@ import yaml
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 PY = sys.executable
-TRUTH = {"fire": (-2.0, 0.1), "flame": (2.3, 0.6)}
+TRUTH = {"fire": (-2.0, 0.1), "flame": (2.3, 0.6), "tree": (0.5, 0.8)}
 SCENARIOS = [
     ("perfect cameras", {}),
     ("thermal lens 30 % narrower than assumed", {"thermal": {"focal_error": 0.7}}),
@@ -41,7 +42,7 @@ def run(name, err, runs_dir):
     summary = json.load(open(os.path.join(run_dir, "summary.json")))
     ok, parts = summary["result"] == "completed", []
     names = sorted(o["name"] for o in objs)
-    if names != ["fire", "flame"]:
+    if names != ["fire", "flame", "tree"]:
         ok = False
     for o in objs:
         t = TRUTH.get(o["name"])
@@ -53,6 +54,15 @@ def run(name, err, runs_dir):
     alarms = p.stdout.count("[ALARM] IGNITION SOURCE") + p.stderr.count("[ALARM] IGNITION SOURCE")
     if alarms != 2:
         ok = False
+    snaps = os.listdir(os.path.join(run_dir, "snapshots"))
+    for o in objs:
+        if o["name"] in ("fire", "flame") and not any("_%s_rgb" % o["name"] in s for s in snaps) or \
+           o["name"] in ("fire", "flame") and not any("_%s_thermal" % o["name"] in s for s in snaps):
+            ok = False
+            parts.append("missing snapshots for %s" % o["name"])
+    if "INSPECT" in p.stdout:
+        ok = False
+        parts.append("drone went down to inspect")
     print("%s  %-46s objects %d, alarms %d, %s | %s" % ("PASS" if ok else "FAIL", name, len(objs), alarms, summary["result"], "; ".join(parts)))
     return ok
 

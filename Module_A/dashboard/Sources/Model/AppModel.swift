@@ -53,6 +53,8 @@ final class AppModel {
         economics.reload()
         documents.reload()
         aiModel.reload()
+        MissionLogArchive.mirror(runsDir: settings.toolkitRoot.appending(path: "runs"))
+        watchForFinishedFlights()
         // `-autoRecordSeconds 8`: record both panes for N seconds after launch (self-test of the REC button)
         let secs = UserDefaults.standard.double(forKey: "autoRecordSeconds")
         if secs > 0, !autoRecordStarted {
@@ -108,6 +110,50 @@ final class AppModel {
         DroneLink(settings: settings, console: console).launchMission(settings: missionSettings.setArguments)
     }
 
+    // MARK: Mission logs -> Desktop
+
+    private var lastPhase = ""
+    private var runningDroneJobs: Set<ProcessJob.ID> = []
+    private var fetchJob: ProcessJob?
+
+    /// Every finished drone mission and flight test is copied to ~/Desktop/BRICS Mission Logs automatically.
+    private func watchForFinishedFlights() {
+        Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                self?.checkFinishedFlights()
+            }
+        }
+    }
+
+    private func checkFinishedFlights() {
+        var finished = false
+        if settings.missionSource == .drone, mission.connected {
+            let phase = mission.phase.uppercased()
+            let done = ["DONE", "STOPPED"].contains(phase)
+            if done, !lastPhase.isEmpty, !["DONE", "STOPPED"].contains(lastPhase) { finished = true }
+            lastPhase = phase
+        }
+        // flight-test scripts (hover, roam, motor ramp, ArUco scan) and the mission job itself
+        let droneTitles = ["Case 1 mission", "Hover", "Motor ramp", "ArUco"]
+        let running = Set(console.jobs.filter { job in job.isRunning && droneTitles.contains { job.title.hasPrefix($0) } }.map(\.id))
+        if !runningDroneJobs.subtracting(running).isEmpty { finished = true }
+        runningDroneJobs = running
+        guard finished, fetchJob?.isRunning != true else { return }
+        try? FileManager.default.createDirectory(at: MissionLogArchive.folder, withIntermediateDirectories: true)
+        let job = DroneLink(settings: settings, console: console)
+            .fetchResults(toolkit: settings.toolkitRoot, title: "Save mission logs to Desktop")
+        fetchJob = job
+        job.onExit = { [weak self] _ in
+            Task { @MainActor in
+                self?.runs.reload { [weak self] in
+                    guard let self else { return }
+                    self.spec.evaluate(latest: self.runs.latestCase1)
+                }
+            }
+        }
+    }
+
     // MARK: Simulation
 
     func startSimulation(timeScale: Double = 3, autostart: Bool = false) {
@@ -141,6 +187,7 @@ final class AppModel {
         job.onExit = { [weak self] _ in
             Task { @MainActor in
                 self?.simulationRunning = false
+                MissionLogArchive.mirror(runsDir: root.appending(path: "runs"))
                 self?.runs.reload { [weak self] in
                     guard let self else { return }
                     self.spec.evaluate(latest: self.runs.latestCase1)

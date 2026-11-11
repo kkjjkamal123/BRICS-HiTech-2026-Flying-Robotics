@@ -1,42 +1,88 @@
 #!/usr/bin/env python3
 """
-CASE 1 - University 2035: Autonomous detection of ignition sources (campfire / flame, car).
+CASE 1 - University 2035: autonomous detection of ignition sources (heat source / flame) and trees.
 
-Flight: takeoff -> lawnmower survey of the area -> every confirmed fire/car: LED alarm, hover above it,
-snapshot, exact map coordinates -> return home -> land -> HTML/CSV report + live operator UI.
+Flight: takeoff -> lawn-mower survey of the area -> every confirmed fire / flame: alarm, the drone holds its position
+at survey height (it never descends or flies towards it: tall artificial trees stand in the field) and photographs it
+with both cameras -> trees are mapped and photographed without stopping -> return home -> land.
 
-Detection (config/case1_fire.yaml): YOLO model (fire/smoke/car) + thermal hot-spot + HSV flame fallback.
+Detection (config/case1_fire.yaml): thermal neural network (fire, flame) + >= 100 C rule, RGB flame network,
+green-area detector for trees.
 Run:
-  python3 drone/case1_fire.py --config config/case1_fire.yaml              # real drone / Gazebo
+  python3 drone/case1_fire.py --config config/case1_fire.yaml              # real drone
   python3 drone/case1_fire.py --config config/case1_fire.yaml --mock --autostart   # laptop test
 """
 import os
 import sys
 
+import cv2
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from drone.mission_base import Mission  # noqa: E402
 
-PRIORITY = {"fire": 0, "flame": 0, "hotspot": 0, "smoke": 1, "car": 2}
+IGNITION = {"fire", "flame", "hotspot", "smoke"}
 
 
 class FireMission(Mission):
-    """Case 1: fire / ignition source search."""
+    """Case 1: ignition source search."""
     name = "case1_fire"
 
     def plan(self):
         for (x, y, z, yaw) in self.survey_waypoints():
             self.fly(x, y, z, yaw)
+        self.handle_new_objects()
+
+    def go_home(self):
+        Mission.go_home(self)
+        # sources confirmed on the way home still get their alarm and photos (from home, before landing)
+        for obj in self.new_objects[:]:
+            self.new_objects.remove(obj)
+            if obj["name"] in IGNITION:
+                self.log("[ALARM] IGNITION SOURCE #%d %s at (%.2f, %.2f)%s" % (
+                    obj["id"], obj["name"], obj["x"], obj["y"],
+                    "  %.0f C" % obj["temp_c"] if obj.get("temp_c") is not None else ""))
+                self.drone.led(255, 0, 0, "flash")
+            self.snapshot_all(obj, "late")
+
+    def snapshot_all(self, obj, tag=""):
+        """Photo from every camera at this moment: runs/<run>/snapshots/obj<id>_<class>_<camera>[_tag].jpg"""
+        saved = []
+        for key, cam in self.cameras.items():
+            peek = getattr(cam, "peek", None)
+            f = peek() if peek else cam.get()          # simulated cameras render a fresh frame
+            if f is None or f.get("img") is None:
+                continue
+            name = "obj%03d_%s_%s%s.jpg" % (obj["id"], obj["name"], key, ("_" + tag) if tag else "")
+            path = os.path.join(self.run_dir, "snapshots", name)
+            if cv2.imwrite(path, f["img"]):
+                saved.append(name)
+        if saved:
+            obj.setdefault("snapshots", []).extend(saved)
+            self.log("[snapshot] #%d %s: %s" % (obj["id"], obj["name"], ", ".join(saved)))
 
     def on_object(self, obj):
-        # fire-like objects get an inspection hover + red alarm; others just get logged + blue flash
-        if PRIORITY.get(obj["name"], 3) == 0:
-            self.log("[ALARM] IGNITION SOURCE #%d at (%.2f, %.2f)" % (obj["id"], obj["x"], obj["y"]))
-            Mission.on_object(self, obj)
+        if obj["name"] in IGNITION:
+            self.log("[ALARM] IGNITION SOURCE #%d %s at (%.2f, %.2f)%s" % (
+                obj["id"], obj["name"], obj["x"], obj["y"],
+                "  %.0f C" % obj["temp_c"] if obj.get("temp_c") is not None else ""))
+            self.drone.led(255, 0, 0, "flash")
+            hold = float(self.cfg.get("snapshot_hover", 2.0) or 0.0)
+            if hold > 0:
+                self.phase("SNAPSHOT", "object #%d %s - holding position %.0f s" % (obj["id"], obj["name"], hold))
+                self.snapshot_all(obj, "start")
+                self.hover(hold)
+                self.snapshot_all(obj, "end")
+                self.phase("MISSION", "resume")
+            else:
+                self.snapshot_all(obj)
+            Mission.on_object(self, obj)          # close inspection only if `inspect.enabled` (off at this venue)
         else:
-            self.drone.led(0, 0, 255, "flash")
+            self.log("[detect] %s #%d at (%.2f, %.2f) - mapped, no stop" % (obj["name"], obj["id"], obj["x"], obj["y"]))
+            self.drone.led(0, 255, 0, "flash")
+            self.snapshot_all(obj)
 
     def extra_report_html(self):
-        fires = [o for o in self.tracker.confirmed() if PRIORITY.get(o["name"], 3) == 0]
+        fires = [o for o in self.tracker.confirmed() if o["name"] in IGNITION]
         if not fires:
             return "<h2 style='color:green'>No ignition sources found</h2>"
         items = "".join("<li><b>%s #%d</b> at X=%.2f m, Y=%.2f m</li>" % (o["name"], o["id"], o["x"], o["y"]) for o in fires)

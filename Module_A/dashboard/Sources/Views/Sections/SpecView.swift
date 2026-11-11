@@ -20,7 +20,7 @@ struct SpecView: View {
         }
     }
 
-    /// The spec scores Case 1 (forest fire); other mission folders (e.g. Case 3 swarm) are skipped.
+    /// The spec scores Case 1 (forest fire); other run folders are skipped.
     private var latestRun: RunSummary? {
         let runs = model.runs.missionRuns
         return runs.first { $0.id.hasPrefix("case1") } ?? runs.first

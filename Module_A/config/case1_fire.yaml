@@ -13,10 +13,11 @@ overlap: 0.3                    # 30% overlap between survey lines (step compute
 # step: 0.8                     # or set line spacing manually
 frame_id: aruco_map
 
-inspect:                        # what to do when a fire is confirmed
-  enabled: true
-  z: 1.0                        # descend to 1 m above it
-  hover: 3.0                    # seconds
+inspect:                        # NO close inspection: tall artificial trees stand in the field, so the drone never
+  enabled: false                # descends or flies towards a source. It stops where it is and photographs it.
+  z: 1.0
+  hover: 3.0
+snapshot_hover: 2.0             # seconds the drone holds position (same height) to photograph a confirmed fire / flame
 
 # Two kinds of ignition source at the venue, kept apart on the map:
 #   fire  = HEAT: anything the thermal camera reads at or above 100 C
@@ -64,11 +65,12 @@ detectors:
     conf: 0.50
     names: {0: flame}           # the model's class is called 'fire'; on the map it is the 'flame' (lamp)
     every: 2                    # every 2nd frame: the thermal network finds the lamp too, and this keeps >= 10 FPS
-  - type: yolo                  # COCO pretrained model - detects 'car' out of the box (no training)
-    model: weights/yolo11n_416.onnx   # on the drone the NPU copy next to it (yolo11n_416_rknn_model) is used
-    conf: 0.40
-    classes: [car, truck]
-    every: 3                    # the car is the secondary object: check every 3rd frame, keeps fire detection fast
+  - type: exg                   # ADDITIONAL OBJECT: trees (the artificial Christmas trees in the field). Seen from above a
+    image: rgb                  # tree is a large green area on the white marker field: excess-green segmentation finds it
+    label: tree                 # with no training. Logged and mapped; the drone never flies towards it.
+    min_area: 3000              # px on the 640 x 480 main camera: ignores small green tape / markers
+    min_excess: 40              # pixel counts as green when 2G - R - B >= 40 (white floor 0, red lamp < 0)
+    every: 2
   # (the plain colour detector was removed on 10 Nov: it raised a false fire alarm on red/white floor tape.
   #  The trained model above handles the flame lamp; the thermal rule handles anything >= 100 C.)
 
@@ -92,5 +94,5 @@ mock:
     - {name: heater, x: -2.0, y: 0.1, r: 0.07, temp: 160, rgb_visible: false}          # > 100 C, only the thermal camera sees it
     - {name: flame_lamp, x: 2.3, y: 0.6, r: 0.15, color: [60, 40, 255]}                # red lamp, cold: only the camera model sees it
     - {name: warm_laptop, x: 0.4, y: -0.7, r: 0.15, temp: 45, rgb_visible: false}      # warm but < 100 C: NOT fire
-    - {name: decoy_green, x: 0.5, y: 0.8, r: 0.15, color: [40, 160, 40]}
+    - {name: christmas_tree, x: 0.5, y: 0.8, r: 0.30, color: [40, 160, 40]}            # tree: mapped as 'tree', no alarm
   # camera_error: {thermal: {focal_error: 0.7}, rgb: {flipped: true}}                  # rehearse badly calibrated cameras

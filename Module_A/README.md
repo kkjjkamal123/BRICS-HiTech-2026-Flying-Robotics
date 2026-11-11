@@ -3,17 +3,18 @@
 **BRICS Hi-Tech Future Skills 2026 · Flying Robotics · Chennai Institute of Technology**
 Kamalesh Vadivelu Syamala · Bejin Paul Josephin Paul Benjamin
 
-An autonomous quadcopter (SKYRIS TECHNIC 6S) that flies a survey route without GPS, finds ignition sources with neural networks running on its NPU (thermal and RGB cameras), measures their temperature, puts them on a live map with type and time, and reports everything to the operator's dashboard.
+An autonomous quadcopter (SKYRIS TECHNIC 6S) that flies a survey route without GPS, finds ignition sources (heat source, flame) with neural networks running on its NPU (thermal and RGB cameras), measures their temperature, photographs them, puts them and the trees in the field on a live map with type and time, and reports everything to the operator's dashboard.
 
 ## Results so far
 
 * Autonomous survey flights on the venue marker map: completed, return to the start point, automatic landing.
 * Thermal neural network (heat source + flame lamp): **mAP@0.5 0.987** on two flights not used for training.
 * RGB flame network: mAP@0.5 0.995. All networks on the NPU (13.4 ms and 40 ms per frame).
+* Trees (artificial trees in the field) are mapped as an additional object. The drone never flies close to a source: it holds position and photographs it with both cameras.
 * Onboard processing in flight: 13–14 FPS, ≥ 10 FPS in 98–100 % of airborne seconds.
 * 22 flight-safety tests and 8 venue-simulation scenarios pass.
 
-Details: [docs/12_Test_Evidence.md](docs/12_Test_Evidence.md).
+Details: [docs/12_Test_Evidence.md](docs/12_Test_Evidence.md), raw logs in [`../Others/evidence/`](../Others/evidence/).
 
 ## Documentation (Module A)
 
@@ -32,24 +33,22 @@ Details: [docs/12_Test_Evidence.md](docs/12_Test_Evidence.md).
 | 11 | [Technical specification](docs/11_Technical_Specification.md): C1–C7, modules, scenario | Spec |
 | 12 | [Test evidence](docs/12_Test_Evidence.md) | — |
 
-## Repository layout
+## Folder layout
 
 | Folder | Contents |
 |---|---|
-| `drone/` | Missions (`case1_fire.py`), mission engine, drone API with safety layer, cameras |
-| `common/` | Detectors (YOLO on NPU/CPU, thermal), geometry and tracker, camera self-calibration, thermal decoding, mission link |
-| `tools/` | Thermal camera node, flight tests (motor ramp, hover, ArUco roam/scan), parameter audit |
+| `docs/` | Module A documentation (table above) |
+| `drone/` | Case 1 mission (`case1_fire.py`), mission engine, drone API with safety layer, cameras |
+| `common/` | Detectors (YOLO on NPU/CPU, thermal, tree), geometry and tracker, camera self-calibration, thermal decoding, mission link |
+| `tools/` | Thermal camera node, flight tests (motor ramp, hover, ArUco roam and scan) |
 | `config/` | Mission configuration (`case1_fire.yaml`) and the venue ArUco map |
 | `dashboard/` | BRICS Dashboard, native macOS ground station (SwiftUI) |
-| `train/` | Dataset preparation, labelling, training, export (ONNX / RKNN) |
-| `models/`, `weights/` | Trained networks (ONNX + RKNN) with metrics and training plots |
-| `datasets/` | Our venue datasets (thermal and RGB) |
-| `cad/` | Fusion scripts and outputs: thermal camera mount, aircraft model, wiring diagram |
+| `models/` | Trained networks (ONNX + RKNN) with metrics: thermal (`thermal_fire`), RGB flame (`fire`) |
+| `train/` | Dataset labelling, training and export (ONNX / RKNN) |
+| `setup/` | Install, deploy to the drone, thermal service, model conversion, dashboard build |
 | `tests/` | Flight-safety tests, thermal network tests, venue simulator |
-| `evidence/` | Real flight logs, detections, snapshots, drone configuration |
-| `economics/` | Economic model (Module C) |
-| `setup/` | Install, deploy, model conversion, dashboard build |
-| `studio/` | Desktop tool for training, simulation and document generation |
+
+Supporting material (flight logs and snapshots, datasets, drone configuration dump, economic model, Docker files) is in [`../Others/`](../Others/).
 
 ## Dependencies
 

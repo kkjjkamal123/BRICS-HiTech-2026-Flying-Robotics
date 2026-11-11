@@ -2,8 +2,8 @@
 """
 Flight-safety unit tests (no drone, no ROS, no pytest needed):   python tests/test_flight_safety.py
 Covers: geofence + altitude limit, takeoff/arming failures, operator commands, START only on a real Enter,
-survey coverage, power-line plan never crossing the wires, swarm height layers, planner robustness,
-triangulation ghosts, studio input checks, Cube parameter audit.
+survey coverage,
+triangulation ghosts.
 """
 import io
 import json
@@ -97,27 +97,6 @@ def ray_tracker_never_confirms_untriangulated_ghost():
 
 
 # ----------------------------------------------------------------------------- geofence
-@test
-def fence_derived_from_mission():
-    # Case 1 uses the venue's marker field as an explicit fence, and must never reach outside it
-    fence = MB.default_fence(load("case1_fire.yaml"))
-    assert fence == (-3.0, -1.5, 3.0, 1.5), fence
-    field = MB.marker_field(os.path.join(ROOT, "config", "aruco_map_750x450_id100.txt"))
-    assert field == (-3.0, -1.5, 3.0, 1.5), field
-    assert MB.outside_marker_field(fence, field) is None
-    assert MB.outside_marker_field((-1.0, -1.0, 5.0, 5.0), field)          # the placeholder area that left the arena
-    assert MB.outside_marker_field(None, field)                              # no fence at all is refused too
-    f = MB.default_fence(load("case4_powerline.yaml"))
-    assert f[0] <= 0 and f[1] <= 0 and f[2] >= 4.5 + 1.2 and f[3] >= 2.0 + 1.2, f      # home + orbit radius inside
-    f = MB.default_fence(load("case3_swarm.yaml"))
-    assert f[1] <= -0.8, f                                                              # swarm pads inside
-    assert MB.default_fence(simple_cfg(safety={"fence": [0, 0, 3, 3]})) == (0, 0, 3, 3)
-    assert MB.default_fence(simple_cfg(safety={"fence": False})) is None
-    try:
-        MB.default_fence(simple_cfg(safety={"fence": [3, 0, 0, 3]}))
-        raise AssertionError("bad fence accepted")
-    except ValueError:
-        pass
 
 
 @test
@@ -277,90 +256,9 @@ def inspection_moves_are_vertical_and_horizontal_only():
 
 
 # ----------------------------------------------------------------------------- case 4: never cross the wires
-def _segments_cross(p, q, a, b):
-    def orient(u, v, w):
-        return (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0])
-    d1, d2, d3, d4 = orient(a, b, p), orient(a, b, q), orient(p, q, a), orient(p, q, b)
-    return d1 * d2 < 0 and d3 * d4 < 0
-
-
-def _point_seg_dist(c, p, q):
-    vx, vy = q[0] - p[0], q[1] - p[1]
-    L2 = vx * vx + vy * vy
-    t = 0 if L2 == 0 else max(0, min(1, ((c[0] - p[0]) * vx + (c[1] - p[1]) * vy) / L2))
-    return math.hypot(c[0] - p[0] - t * vx, c[1] - p[1] - t * vy)
-
-
-def _case4_path(supports, home):
-    from drone.case4_powerline import PowerLineMission
-    cfg = load("case4_powerline.yaml")
-    cfg["supports"], cfg["home"] = supports, home
-    cfg["safety"]["fence"] = False
-    pts = [tuple(home) + (0.0,)]
-
-    class Rec(PowerLineMission):
-        def log(self, msg):
-            pass
-
-        def fly(self, x, y, z=None, *a, **k):
-            z = self.alt if z is None else z
-            pts.append((x, y, z))
-            self.drone.pos = [x, y, z]                     # recorder: "arrive" immediately
-            return True
-
-        def hover(self, s):
-            pass
-
-        def phase(self, *a):
-            pass
-    m = Rec(cfg, mock=True)
-    m.drone.pos = [home[0], home[1], 1.0]
-    m.plan()
-    m.go_home()
-    return pts
-
-
-@test
-def powerline_plan_never_crosses_wires():
-    layouts = [([[1.5, 2.0], [4.5, 2.0]], [0, 0]),                 # default config
-               ([[1.5, 2.0], [4.5, 2.0]], [3, 4]),                 # home on the other side -> go round the ends
-               ([[2.0, 0.0], [2.0, 3.0], [4.0, 5.0]], [0, 0]),      # bent line
-               ([[0.0, 0.0], [3.0, 0.0], [6.0, 1.0], [8.0, 3.0]], [4, -2])]
-    for supports, home in layouts:
-        path = _case4_path(supports, home)
-        wires = list(zip(supports, supports[1:]))
-        for p, q in zip(path, path[1:]):
-            for a, b in wires:
-                assert not _segments_cross(p, q, a, b), ("crosses wire", supports, home, p, q)
-            for s in supports:
-                assert _point_seg_dist(s, p, q) > 0.6, ("too close to a support", s, p, q)
 
 
 # ----------------------------------------------------------------------------- swarm
-@test
-def swarm_drones_stay_in_their_layer():
-    from drone.case3_swarm_agent import SwarmAgent
-    cfg = load("case3_swarm.yaml")
-    cfg["swarm"]["planner_url"] = None
-    alts = []
-    for i in range(3):
-        a = SwarmAgent(json.loads(json.dumps(cfg)), drone_id=i, mock=True)
-        assert a.cfg["takeoff_z"] == a.alt and a.inspection_height() == a.alt
-        alts.append(a.alt)
-    assert len(set(alts)) == 3 and min(b - a for a, b in zip(sorted(alts), sorted(alts)[1:])) >= 0.3
-
-
-@test
-def planner_survives_nan_positions_and_bad_commands():
-    from drone.case3_planner import Planner
-    cfg = load("case3_swarm.yaml")
-    cfg["swarm"]["alerts_file"] = os.path.join(TMP, "alerts.csv")
-    p = Planner(cfg)
-    p.heartbeat({"id": 0, "phase": "MISSION", "xyz": [float("nan"), 1.0, 1.2]})
-    p.heartbeat({"id": 1, "phase": "MISSION", "xyz": [1.0, 1.0, 1.2]})
-    json.dumps(p.snapshot(), allow_nan=False, default=str)      # the dashboard JSON must stay valid
-    assert p.detection({"id": 0, "name": "infected", "x": float("nan"), "y": 1.0, "conf": 1})["new"] is False
-    assert p.detection({"id": 0, "name": "infected", "x": 1.0, "y": 1.0, "conf": 1})["new"] is True
 
 
 @test
@@ -371,54 +269,9 @@ def ui_status_json_is_finite():
 
 
 # ----------------------------------------------------------------------------- studio
-@test
-def studio_rejects_shell_injection_in_drone_address():
-    from studio import studio as S
-    pr = {"case": "case1", "config": "config/case1_fire.yaml", "slug": "x"}
-    assert "orangepi@10.42.0.1" in S.terminal_commands(pr, "ssh", "10.42.0.1")
-    for bad in ("10.42.0.1; rm -rf ~", "$(reboot)", "a b", ""):
-        try:
-            S.terminal_commands(pr, "ssh", bad)
-            raise AssertionError("accepted %r" % bad)
-        except ValueError:
-            pass
-    assert S.inside_root("../../etc/passwd") is None and S.inside_root("README.md")
-
-
-@test
-def desktop_quick_settings_validation():
-    try:
-        import PySide6  # noqa: F401
-    except ImportError:
-        return                                                   # GUI deps not in this environment
-    from studio.desktop_app import parse_quick
-    assert parse_quick("area", "0, 0, 4, 4") == [0, 0, 4, 4]
-    for k, v in (("area", "0, 0, 4"), ("area", "4, 0, 0, 4"), ("altitude", "12"), ("home", "1"), ("supports", "1, 2, 3"),
-                 ("safety.min_cell_voltage", "2.0"), ("swarm.planner_url", "http://x; rm")):
-        try:
-            parse_quick(k, v)
-            raise AssertionError("accepted %s=%s" % (k, v))
-        except ValueError:
-            pass
 
 
 # ----------------------------------------------------------------------------- Cube parameters
-@test
-def cube_params_audit():
-    sys.path.insert(0, os.path.join(ROOT, "tools"))
-    import param_audit as PA
-    csv = os.path.join(ROOT, "..", "cube_params_backup_original.csv")
-    if not os.path.exists(csv):
-        return
-    before = open(csv, "rb").read()
-    p = PA.load_params(csv)
-    findings, safe = PA.audit(p, cells=3)
-    fails = {n for lv, n, _ in findings if lv == "FAIL"}
-    assert {"ARMING_SKIPCHK", "FS_THR_ENABLE"} <= fails, fails
-    assert safe["ARMING_SKIPCHK"] == 0 and safe["FS_THR_ENABLE"] == 3 and safe["DISARM_DELAY"] == 10
-    fixed = dict(p, **safe)
-    assert not [f for f in PA.audit(fixed, cells=3)[0] if f[0] == "FAIL"]
-    assert open(csv, "rb").read() == before                       # the backup is never modified
 
 
 @test

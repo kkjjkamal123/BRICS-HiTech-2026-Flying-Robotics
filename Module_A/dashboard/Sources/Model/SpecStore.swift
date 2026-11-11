@@ -95,8 +95,8 @@ final class SpecStore {
             set("C2", String(format: "mAP@0.5 %.3f", m), m >= 0.85 ? .pass : .fail)
         }
         // C3 extra object
-        let cars = (run.counts["car"] ?? 0) + (run.counts["truck"] ?? 0)
-        set("C3", "\(cars) car(s) confirmed", cars >= 1 ? .pass : .fail)
+        let trees = run.counts["tree"] ?? 0
+        set("C3", "\(trees) tree(s) mapped", trees >= 1 ? .pass : .fail)
         // C4 FPS on the thermal stream
         if let span = run.fps?.best(camera: "thermal") ?? run.fps?.best(camera: "rgb") {
             set("C4", String(format: "%.0f%% of %ds ≥ 10 FPS (mean %.1f)", span.pctAtLeast10, span.seconds, span.meanFPS),
@@ -140,8 +140,8 @@ final class SpecStore {
                  method: "Planned waypoints vs flown path, no RC input", evidence: "log.txt · path.csv · video"),
         SpecItem(id: "C2", title: "Flame detection in thermal images", unit: "mAP@0.5", threshold: "≥ 0.85",
                  method: "Thermal frames of the scored flight, expert-checked ground truth, Ultralytics val", evidence: "frames/ · labels · mAP printout"),
-        SpecItem(id: "C3", title: "Additional object (car model)", unit: "detected / placed", threshold: "1 of 1, correct class",
-                 method: "Expert places the car; confirmed `car` in report.csv", evidence: "report.csv · events.csv · snapshot"),
+        SpecItem(id: "C3", title: "Additional object (trees)", unit: "detected / present", threshold: "every tree in the area, correct class",
+                 method: "Confirmed `tree` entries in objects.json vs the trees in the field", evidence: "objects.json · events.csv · snapshots"),
         SpecItem(id: "C4", title: "Onboard NPU processing rate", unit: "FPS per 1-s interval", threshold: "≥ 10 FPS for > 90 % of airborne time",
                  method: "Every perception cycle timestamped in perf.csv", evidence: "perf.csv · fps_summary.json"),
         SpecItem(id: "C5", title: "Object coordinate accuracy", unit: "m (horizontal)", threshold: "≤ 0.5 m for every object",
@@ -156,7 +156,7 @@ final class SpecStore {
         SpecModule(id: "M1", title: "Flight & navigation", contents: "PX4 · SKYRIS simple_offboard · ArUco map + optical flow + rangefinder · mission planner & safety layer",
                    function: "Autonomous take-off to 1.5 m, 5 s position hold, landing (hover_test.py)",
                    criterion: "1.5 ± 0.15 m · drift ≤ 0.2 m · lands and disarms without RC", status: "Flown 9 Nov 2026", done: true),
-        SpecModule(id: "M2", title: "Thermal perception", contents: "TR256i °C stream · hot-spot > 60 °C · YOLO fire (RKNN NPU) · YOLO car (RGB) · tracker",
+        SpecModule(id: "M2", title: "Thermal perception", contents: "TR256i °C stream · ≥ 100 °C rule · thermal YOLO + RGB flame YOLO (RKNN NPU) · tree detector · tracker",
                    function: "Bench: drone held still 1.5 m above the lit mock campfire",
                    criterion: "fire confirmed ≤ 3 s · conf ≥ 0.5 · ≥ 10 FPS", status: "Needs trained fire model", done: false),
         SpecModule(id: "M3", title: "Ground station & logging", contents: "Operator UI :8090 · this dashboard · events.csv · report",

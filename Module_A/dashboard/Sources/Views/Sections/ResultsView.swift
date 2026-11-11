@@ -159,7 +159,7 @@ private enum Fmt {
 }
 
 private extension RunSummary {
-    /// Folder prefix before the timestamp, e.g. "case1_fire" or "case3_swarm_d0".
+    /// Folder prefix before the timestamp, e.g. "case1_fire".
     var caseKey: String {
         guard kind == .mission, let r = id.range(of: #"_\d{8}_\d{6}"#, options: .regularExpression) else { return "" }
         return String(id[..<r.lowerBound])
@@ -173,12 +173,6 @@ private extension RunSummary {
         }
         let key = caseKey
         if key.hasPrefix("case1") { return "Case 1 · Fire survey" }
-        if key.hasPrefix("case2") { return "Case 2 · Weed count" }
-        if key.hasPrefix("case3") {
-            let agent = key.split(separator: "_").last.map { $0.uppercased() } ?? ""
-            return "Case 3 · Swarm \(agent)"
-        }
-        if key.hasPrefix("case4") { return "Case 4 · Power line" }
         return key.isEmpty ? "Mission" : key
     }
 

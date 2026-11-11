@@ -44,6 +44,7 @@ enum Theme {
         case "fire", "hotspot": critical          // heat: thermal camera, >= 100 C
         case "flame": accent                      // the flame lamp, seen by the camera model
         case "car", "truck": signal
+        case "tree": ok
         default: textSecondary
         }
     }
@@ -54,6 +55,7 @@ enum Theme {
         case "flame": "flame.fill"
         case "smoke": "smoke.fill"
         case "car", "truck": "car.fill"
+        case "tree": "tree.fill"
         default: "scope"
         }
     }
