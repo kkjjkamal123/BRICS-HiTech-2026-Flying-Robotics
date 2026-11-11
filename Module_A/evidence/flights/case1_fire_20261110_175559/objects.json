@@ -1,0 +1,28 @@
+[
+ {
+  "id": 1,
+  "name": "fire",
+  "x": -0.034504715257346344,
+  "y": -0.06307064683422536,
+  "z": 0.0,
+  "hits": 3,
+  "conf": 0.9603999999999999,
+  "first_t": 1794304573.6751058,
+  "last_t": 1794304573.6751058,
+  "confirmed_t": 1794304573.6751058,
+  "snapshot": "/home/orangepi/brics_toolkit/runs/case1_fire_20261110_175559/snapshots/obj001_fire.jpg"
+ },
+ {
+  "id": 2,
+  "name": "fire",
+  "x": 2.7002539601394893,
+  "y": 0.8481114646084317,
+  "z": 0.0,
+  "hits": 10,
+  "conf": 0.7058357000350952,
+  "first_t": 1794304593.8984773,
+  "last_t": 1794304598.8915453,
+  "confirmed_t": 1794304594.7256794,
+  "snapshot": "/home/orangepi/brics_toolkit/runs/case1_fire_20261110_175559/snapshots/obj002_fire.jpg"
+ }
+]

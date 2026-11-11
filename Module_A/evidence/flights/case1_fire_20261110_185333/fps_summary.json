@@ -1,0 +1,26 @@
+{
+ "rgb": {
+  "run": {
+   "seconds": 148,
+   "mean_fps": 12.0,
+   "pct_seconds_ge_10": 87.2
+  },
+  "airborne": {
+   "seconds": 138,
+   "mean_fps": 12.9,
+   "pct_seconds_ge_10": 93.5
+  }
+ },
+ "thermal": {
+  "run": {
+   "seconds": 148,
+   "mean_fps": 11.6,
+   "pct_seconds_ge_10": 86.5
+  },
+  "airborne": {
+   "seconds": 138,
+   "mean_fps": 12.4,
+   "pct_seconds_ge_10": 92.8
+  }
+ }
+}

@@ -1,0 +1,20 @@
+# Software on the onboard computer (Orange Pi 5 Pro, hostname technic-8655), 11 Nov 2026
+OS: Orange Pi 1.0.6 Focal (Ubuntu 20.04), kernel 5.10.160-rockchip-rk3588
+ROS: Noetic, mavros 1.20.1, SKYRIS technic 0.25.0
+Python 3.8.10, numpy 1.24.4, opencv 4.2.0, onnxruntime 1.19.2
+RKNN runtime: rknn-toolkit-lite2 2.3.0, librknnrt 2.3.0
+Flight controller: PX4 v1.17.0
+mavros fcu_url: /dev/ttyS0:921600   gcs_url: tcp-l://0.0.0.0:5760 (QGroundControl)
+
+# Measured topic rates on the ground (rostopic hz)
+/main_camera/image_raw                 30.5 Hz
+/thermal/temp                          24.7 Hz
+/mavros/local_position/pose            30.0 Hz
+/rangefinder/range                      9.4 Hz
+/mavros/px4flow/raw/optical_flow_rad   10.0 Hz
+/mavros/battery                         0.5 Hz
+
+# Main camera calibration (/main_camera/camera_info)
+width: 640  height: 480  distortion_model: plumb_bob
+K: [483.97983, 0.0, 335.2751, 0.0, 484.46576, 238.701, 0.0, 0.0, 1.0]
+D: [-0.41713, 0.164188, 0.003958, -0.001738, 0.0]

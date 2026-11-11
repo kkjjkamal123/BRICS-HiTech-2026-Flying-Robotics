@@ -1,0 +1,37 @@
+{
+ "result": "completed",
+ "duration_s": 117.7,
+ "distance_m": 28.92,
+ "mock": false,
+ "objects": 2,
+ "counts": {
+  "flame": 2
+ },
+ "case": "case1_fire",
+ "fps": {
+  "rgb": {
+   "run": {
+    "seconds": 122,
+    "mean_fps": 13.7,
+    "pct_seconds_ge_10": 100.0
+   },
+   "airborne": {
+    "seconds": 117,
+    "mean_fps": 13.8,
+    "pct_seconds_ge_10": 100.0
+   }
+  },
+  "thermal": {
+   "run": {
+    "seconds": 122,
+    "mean_fps": 13.2,
+    "pct_seconds_ge_10": 99.2
+   },
+   "airborne": {
+    "seconds": 117,
+    "mean_fps": 13.3,
+    "pct_seconds_ge_10": 99.1
+   }
+  }
+ }
+}

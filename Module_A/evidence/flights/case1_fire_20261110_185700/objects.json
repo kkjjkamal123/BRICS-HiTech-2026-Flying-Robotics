@@ -1,0 +1,54 @@
+[
+ {
+  "id": 1,
+  "name": "fire",
+  "x": -1.9713242057408176,
+  "y": -0.15191086653573885,
+  "z": 0.0,
+  "hits": 25,
+  "conf": 0.6185000610351563,
+  "first_t": 1794308272.6199958,
+  "last_t": 1794308277.006647,
+  "confirmed_t": 1794308272.7861383,
+  "snapshot": "/home/orangepi/brics_toolkit/runs/case1_fire_20261110_185700/snapshots/obj001_fire.jpg"
+ },
+ {
+  "id": 2,
+  "name": "fire",
+  "x": -1.976438210456027,
+  "y": 0.4996211542461292,
+  "z": 0.0,
+  "hits": 203,
+  "conf": 0.6241250610351563,
+  "first_t": 1794308273.9802196,
+  "last_t": 1794308316.1782339,
+  "confirmed_t": 1794308274.1676824,
+  "snapshot": "/home/orangepi/brics_toolkit/runs/case1_fire_20261110_185700/snapshots/obj002_fire.jpg"
+ },
+ {
+  "id": 3,
+  "name": "fire",
+  "x": -1.5787493503649443,
+  "y": 0.02538601740858,
+  "z": 0.0,
+  "hits": 12,
+  "conf": 0.5803750610351562,
+  "first_t": 1794308277.0414047,
+  "last_t": 1794308302.8661058,
+  "confirmed_t": 1794308277.1457777,
+  "snapshot": "/home/orangepi/brics_toolkit/runs/case1_fire_20261110_185700/snapshots/obj003_fire.jpg"
+ },
+ {
+  "id": 4,
+  "name": "fire",
+  "x": 2.7191075810208685,
+  "y": 0.7977273104033704,
+  "z": 0.0,
+  "hits": 270,
+  "conf": 0.8447265625,
+  "first_t": 1794308325.79285,
+  "last_t": 1794308346.9156778,
+  "confirmed_t": 1794308325.918299,
+  "snapshot": "/home/orangepi/brics_toolkit/runs/case1_fire_20261110_185700/snapshots/obj004_fire.jpg"
+ }
+]

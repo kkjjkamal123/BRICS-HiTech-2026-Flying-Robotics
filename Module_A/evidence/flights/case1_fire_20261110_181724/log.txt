@@ -1,0 +1,16 @@
+21:20:07 [safety] geofence x -3.00..3.00  y -1.50..1.50 m, max altitude 3.0 m (from config)
+21:20:08 [phase] STARTING taking off in 3 s - ABORT cancels
+21:20:09 [phase] STARTING taking off in 2 s - ABORT cancels
+21:20:09 [battery] FC reports 23.41 V per cell -> using 6 cells: 3.90 V/cell
+21:20:10 [phase] STARTING taking off in 1 s - ABORT cancels
+21:20:11 [phase] PREFLIGHT 
+21:20:13 [preflight] aruco_map not visible from the ground - OK, waiting for it after take-off
+21:20:13 [phase] TAKEOFF 
+21:20:13 [drone] takeoff to 1.00 m
+21:20:19 [safety] takeoff rejected: Arming timed out -> landing
+21:20:19 [phase] LAND ABORT: takeoff rejected: Arming timed out
+21:20:19 [drone] landing
+21:20:23 [drone] landed
+21:20:23 [phase] REPORT 
+21:20:23 [phase] DONE ABORT: takeoff rejected: Arming timed out
+21:20:23 [report] /home/orangepi/brics_toolkit/runs/case1_fire_20261110_181724
