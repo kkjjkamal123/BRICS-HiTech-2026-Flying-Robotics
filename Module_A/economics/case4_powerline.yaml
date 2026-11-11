@@ -1,0 +1,28 @@
+title: "Case 4 - UAV inspection of 300 km of power lines"
+customer: "Grid company (Rosseti branch) / energy facility operator"
+purpose: "Autonomous detection of overheating, damaged insulators, deformed supports and wire sag"
+currency: RUB
+years: 5
+discount_rate: 0.18
+rate_note: "key rate + risk premium"
+opex_growth: 0.07
+ramp_up: [0.7, 1.0]
+residual_value: 800000
+capex:
+  - {item: "3 UAVs with thermal + RGB (+ lidar option)", amount: 6000000}
+  - {item: "Inspection software (AI defects, reports to dispatcher)", amount: 2000000}
+  - {item: "Training, certification, ground stations", amount: 500000}
+opex:
+  - {item: "2 operators incl. taxes", amount: 1800000}
+  - {item: "Maintenance, batteries, insurance", amount: 700000}
+benefits:
+  - {item: "Helicopter patrols replaced (300 km x 2/yr x 15 000 RUB/km x 70%)", amount: 6300000}
+  - {item: "Foot patrol labour saved", amount: 2000000}
+  - {item: "Avoided outage (1/yr x 3 000 000 RUB undelivered energy + repair)", amount: 3000000}
+alternatives:
+  - {name: "Helicopter patrol", annual_cost: 9000000, notes: "expensive, risky for crew"}
+  - {name: "Foot patrol", annual_cost: 3000000, notes: "slow, cannot see hot contacts"}
+our_notes: "thermal + AI finds hidden defects; report with coordinates"
+key_factors: ["km of lines covered", "defects found before failure", "helicopter hour price"]
+recommendations: ["integrate reports with the grid's asset-management system", "BVLOS permits for long lines"]
+social_effects: ["fewer blackouts for consumers", "worker safety (no climbing / helicopters)", "fire risk from lines reduced"]

@@ -1,0 +1,28 @@
+title: "Case 2 - Automatic weed mapping for spot spraying (2 000 ha farm)"
+customer: "Agro-holding / farm (agronomy service)"
+purpose: "Count and map weeds automatically to spray herbicide only where needed"
+currency: RUB
+years: 5
+discount_rate: 0.18
+rate_note: "key rate + risk premium"
+opex_growth: 0.07
+ramp_up: [0.7, 1.0]
+residual_value: 200000
+capex:
+  - {item: "UAV with multispectral + RGB camera", amount: 1500000}
+  - {item: "Weed detection software + GIS integration", amount: 800000}
+  - {item: "Training of agronomists / operator", amount: 100000}
+opex:
+  - {item: "Operator (seasonal) incl. taxes", amount: 450000}
+  - {item: "Maintenance, batteries, processing compute", amount: 250000}
+benefits:
+  - {item: "Herbicide saving: 2 000 ha x 2 500 RUB/ha x 30% (spot spraying)", amount: 1500000}
+  - {item: "Agronomist field-scouting time saved", amount: 600000}
+  - {item: "Yield gain 1% (2 000 ha x 4 t/ha x 15 000 RUB/t x 1%)", amount: 1200000}
+alternatives:
+  - {name: "Manual scouting by agronomists", annual_cost: 1400000, notes: "slow, a few % of the field sampled"}
+  - {name: "Blanket herbicide spraying", annual_cost: 5000000, notes: "chemicals everywhere"}
+our_notes: "100% field coverage, weed map in hours"
+key_factors: ["herbicide price", "share of field that can be spot-sprayed", "model accuracy (weed vs crop)"]
+recommendations: ["export maps to the sprayer (prescription maps)", "offer as a service to neighbouring farms"]
+social_effects: ["less herbicide in soil and water", "healthier food", "lower carbon footprint"]

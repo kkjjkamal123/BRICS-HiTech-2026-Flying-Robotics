@@ -1,0 +1,32 @@
+title: "Case 1 - UAV ignition-source monitoring for a forestry district"
+customer: "Regional forestry service (Avialesookhrana / forest district)"
+purpose: "Detect ignition sources (campfires, early fires) in hard-to-reach forest early, before large fires develop"
+currency: RUB
+years: 5
+discount_rate: 0.18          # ~Bank of Russia key rate + risk premium - CHECK the current key rate
+rate_note: "key rate + project risk premium"
+benefit_growth: 0.0
+opex_growth: 0.07            # inflation
+ramp_up: [0.6, 1.0]          # year 1: 60% of benefits (deployment, training)
+residual_value: 300000
+capex:
+  - {item: "2 UAVs with thermal + RGB camera, onboard NPU computer", amount: 1800000}
+  - {item: "Software development (navigation, AI detection, operator UI)", amount: 1200000}
+  - {item: "Ground station, batteries, chargers, transport cases", amount: 300000}
+  - {item: "Operator training and certification", amount: 200000}
+opex:
+  - {item: "Operator (0.5 FTE) incl. taxes", amount: 900000}
+  - {item: "Maintenance, spare parts, batteries", amount: 350000}
+  - {item: "Insurance, registration, data link", amount: 150000}
+benefits:
+  - {item: "Fewer manned patrol flights (60 h x 60 000 RUB/h x 50%)", amount: 1800000, comment: "UAV replaces half of aircraft patrol hours"}
+  - {item: "Avoided fire damage (earlier detection: ~2 fires/yr x 10 ha saved x 150 000 RUB/ha)", amount: 3000000}
+  - {item: "Reduced ground-crew patrol time", amount: 400000}
+alternatives:
+  - {name: "Manned aircraft patrol", annual_cost: 3600000, notes: "expensive per hour, weather limited"}
+  - {name: "Fire watch towers + cameras", annual_cost: 2500000, notes: "fixed view, blind zones in valleys"}
+  - {name: "Satellite monitoring", annual_cost: 500000, notes: "detects only large fires, hours of delay"}
+our_notes: "detects small ignition sources in real time with coordinates"
+key_factors: ["number of fires detected early", "patrol hours replaced", "UAV availability (weather, batteries)"]
+recommendations: ["start with 1 district, scale to the region", "share UAVs between forestry and emergency services", "use the NPU onboard to avoid expensive data links"]
+social_effects: ["less burned forest and CO2 emissions", "safety of firefighters and residents", "less smoke pollution for cities"]
