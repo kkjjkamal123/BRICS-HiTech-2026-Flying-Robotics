@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Secrets and local settings
+.env
+*.env
+*.local
+
+# Generated at runtime or by builds
+runs/
+Module_A/offline/
+Module_A/build/
+Module_A/dashboard/build/
+Module_A/dashboard/*.xcodeproj/
+Module_A/studio/projects/
+Module_A/config/generated/
+Module_A/economics/generated/
+*.cache
+*.app/
+*.exe
