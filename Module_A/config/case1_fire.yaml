@@ -1,0 +1,96 @@
+# CASE 1 - Autonomous forest fire monitoring.  All coordinates in metres, frame aruco_map.
+case: case1_fire
+title: "Case 1 - Autonomous Ignition Source Detection"
+
+# VENUE FIELD (organisers' map aruco_map_750x450_id100.txt): origin (0, 0) = CENTRE of the field,
+# marker centres x -3.0..3.0, y -1.5..1.5.  The scan stays 0.5 m inside the outer markers.
+area: [-2.5, -1.0, 2.5, 1.0]    # x0, y0, x1, y1 of the zone to scan
+home: [0.0, 0.0]                # where to return before landing = field centre
+altitude: 1.5                   # survey height (m). Higher = wider view, smaller objects
+takeoff_z: 1.0
+speed: 0.4                      # m/s. Slower = sharper images, more detections
+overlap: 0.3                    # 30% overlap between survey lines (step computed from camera FOV)
+# step: 0.8                     # or set line spacing manually
+frame_id: aruco_map
+
+inspect:                        # what to do when a fire is confirmed
+  enabled: true
+  z: 1.0                        # descend to 1 m above it
+  hover: 3.0                    # seconds
+
+# Two kinds of ignition source at the venue, kept apart on the map:
+#   fire  = HEAT: anything the thermal camera reads at or above 100 C
+#   flame = the flame lamp, seen by the trained model on the main camera
+class_alias: {hotspot: fire}
+tracker:
+  radius: 1.2                   # ONE source = ONE map entry: detections of the same class within 1.2 m are the same
+                                # object and are merged, never mapped again (the two sources are metres apart)
+  min_hits: 4                   # seen in >=4 frames before we believe it (kills false alarms)
+  same_object: [fire, flame]    # a source that is hot AND looks like a flame is ONE entry (shown as fire, with its temperature)
+self_calibrate: true            # work out each camera's true mounting direction / lens scale from the detections in flight
+min_detect_altitude: 0.6        # ignore detections below 0.6 m (on the ground the cameras see tape / the pad from 2 cm)
+report_html: false              # no HTML report: results are read in the BRICS Dashboard (Results page)
+
+save_frames_every: 1.0          # save a frame every 1 s -> training data from the real venue!
+
+cameras:
+  rgb:
+    type: ros
+    topic: main_camera/image_raw      # full rate (the _throttled topic is only 5 frames a second)
+  thermal:                      # TR256i USB-C thermal module, mounted LOOKING DOWN next to the main camera
+    type: ros_thermal           # real temperatures from tools/thermal_node.py (service brics-thermal on the drone)
+    topic: thermal/temp
+    hfov_deg: 56
+    # direct USB instead (only if the thermal node is stopped):  type: cv, device: /dev/camera_second, thermal: auto
+survey_camera: thermal          # survey line spacing from the thermal camera's (narrower) field of view
+
+detectors:
+  - type: thermal               # RULE AT THE VENUE: anything at or above 100 C is fire  (NO training needed)
+    image: thermal_temp         # deg C map
+    mode: celsius
+    threshold_c: 100
+    min_area: 4
+    label: fire
+  - type: yolo                  # THERMAL NEURAL NETWORK (official requirement: NN detection in thermal images)
+    model: models/thermal_fire/best.onnx   # YOLO11n trained on the thermal frames saved in the 10 Nov flights
+    image: thermal              # the thermal picture; every box also gets its hottest deg C from the temperature map
+    conf: 0.50                  # classes: fire = the heat source (round disc), flame = the flame lamp (hot coil)
+    min_temp_c: {fire: 60, flame: 50}   # the picture is auto-ranged, so the warmest thing in view always looks bright:
+                                # a box only counts when it is really hot (people ~35 C, laptops ~45 C are rejected).
+                                # Check the lamp at the venue: point the thermal camera at it and read /thermal/max.
+  - type: yolo                  # your trained model (train/train.py) - skipped if file missing
+    model: models/fire/best.onnx
+    image: rgb                  # trained on the main camera's view of the flame lamp (datasets/flame)
+    conf: 0.50
+    names: {0: flame}           # the model's class is called 'fire'; on the map it is the 'flame' (lamp)
+    every: 2                    # every 2nd frame: the thermal network finds the lamp too, and this keeps >= 10 FPS
+  - type: yolo                  # COCO pretrained model - detects 'car' out of the box (no training)
+    model: weights/yolo11n_416.onnx   # on the drone the NPU copy next to it (yolo11n_416_rknn_model) is used
+    conf: 0.40
+    classes: [car, truck]
+    every: 3                    # the car is the secondary object: check every 3rd frame, keeps fire detection fast
+  # (the plain colour detector was removed on 10 Nov: it raised a false fire alarm on red/white floor tape.
+  #  The trained model above handles the flame lamp; the thermal rule handles anything >= 100 C.)
+
+safety:
+  min_cell_voltage: 3.5         # land if battery per cell below this
+  battery_cells: 6              # TECHNIC 6S pack (23.1 V measured). PX4 reports cell_voltage = pack voltage without this
+  max_time: 540                 # 9 min (the flight-zone slot is 10 min)
+  frame: aruco_map              # land if position in this frame is lost
+  max_altitude: 3.0             # land if higher than this (m) - the cages are 4 m high
+  fence: [-3.0, -1.5, 3.0, 1.5] # geofence = the outer marker centres. Leaving it = land. Never wider than the marker field.
+
+ui:
+  enabled: true                 # the link the BRICS Dashboard app talks to (status, video, Start / Land / Abort)
+  port: 8090
+  web_page: false               # no website: the dashboard app is the only operator screen
+
+# ---- only used with --mock (laptop test): fake objects on the floor
+mock:
+  scene:
+    # the venue as it is: ONE heat source on the left, ONE flame lamp on the right, plus things that must be ignored
+    - {name: heater, x: -2.0, y: 0.1, r: 0.07, temp: 160, rgb_visible: false}          # > 100 C, only the thermal camera sees it
+    - {name: flame_lamp, x: 2.3, y: 0.6, r: 0.15, color: [60, 40, 255]}                # red lamp, cold: only the camera model sees it
+    - {name: warm_laptop, x: 0.4, y: -0.7, r: 0.15, temp: 45, rgb_visible: false}      # warm but < 100 C: NOT fire
+    - {name: decoy_green, x: 0.5, y: 0.8, r: 0.15, color: [40, 160, 40]}
+  # camera_error: {thermal: {focal_error: 0.7}, rgb: {flipped: true}}                  # rehearse badly calibrated cameras

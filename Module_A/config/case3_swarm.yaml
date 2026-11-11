@@ -1,0 +1,56 @@
+# CASE 3 - Swarm detection of the Red Palm Weevil (3-5 drones). Metres, frame aruco_map.
+case: case3_swarm
+title: "Case 3 - Swarm Monitoring of Palm Plantation"
+
+area: [0.0, 0.0, 6.0, 4.0]          # whole plantation  <-- MEASURE AT THE VENUE
+speed: 0.4
+overlap: 0.25
+frame_id: aruco_map
+takeoff_z: 1.0
+
+swarm:
+  n_drones: 3
+  zones: 6                          # more zones than drones = better load balancing
+  axis: x                           # split along x into strips
+  planner_url: http://192.168.1.10:8000   # laptop IP on the shared router. Remove = static strips only
+  base_altitude: 1.2                # drone 0 flies at 1.2 m,
+  layer_step: 0.4                   # drone 1 at 1.6 m, drone 2 at 2.0 m  -> never at the same height
+  homes: [[0.0, -0.8], [2.0, -0.8], [4.0, -0.8]]   # take-off pads (return here)
+  heartbeat_timeout: 8              # s without heartbeat -> drone LOST, its zone reassigned
+  merge_radius: 0.5                 # two reports closer than this = same tree
+  alerts_file: swarm_alerts.csv
+
+inspect: {enabled: true, z: 1.0, hover: 3.0}
+class_alias: {hotspot: infected}
+tracker: {radius: 0.4, min_hits: 3}
+save_frames_every: 1.0
+
+cameras:
+  rgb: {type: ros, topic: main_camera/image_raw_throttled}
+  # thermal: {type: cv, device: 1, hfov_deg: 56}
+
+detectors:
+  - type: yolo                      # trained model, e.g. classes [infected, healthy]
+    model: models/palm/best.onnx
+    conf: 0.45
+    classes: [infected]
+  - type: hsv                       # fallback: yellow/brown 'stressed' crown colour - TUNE AT VENUE
+    label: infected
+    min_area: 200
+    ranges: [[[15, 80, 80], [32, 255, 255]]]
+  # - type: thermal                 # hot/cold anomaly on a thermal camera
+  #   image: thermal
+  #   mode: percentile
+  #   label: infected
+
+safety: {min_cell_voltage: 3.5, battery_cells: 6, max_time: 540, frame: aruco_map, max_altitude: 3.0}   # geofence: auto (area + homes + 1 m)
+ui: {enabled: true, port: 8090}
+
+mock:                               # laptop test: green palms + 1 yellow 'infected' palm
+  scene:
+    - {name: palm, x: 1.0, y: 1.0, r: 0.15, color: [40, 160, 40]}
+    - {name: palm, x: 3.0, y: 1.0, r: 0.15, color: [40, 160, 40]}
+    - {name: palm, x: 5.0, y: 1.0, r: 0.15, color: [40, 160, 40]}
+    - {name: palm, x: 1.0, y: 3.0, r: 0.15, color: [40, 160, 40]}
+    - {name: infected, x: 4.2, y: 2.9, r: 0.15, color: [30, 200, 230]}
+    - {name: palm, x: 3.0, y: 3.0, r: 0.15, color: [40, 160, 40]}
