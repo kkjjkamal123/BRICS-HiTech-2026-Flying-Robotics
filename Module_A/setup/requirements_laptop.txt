@@ -1,0 +1,14 @@
+ultralytics
+torch
+torchvision
+onnx
+onnxruntime
+onnxslim
+opencv-python
+pyyaml
+matplotlib
+pandas
+openpyxl
+formulas
+python-pptx
+markdown
