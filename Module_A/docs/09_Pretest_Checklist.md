@@ -10,11 +10,11 @@ Filled in before every test session. The state recorded below is from **11 Nov 2
 | 4 | Laptop and drone on the same network, drone clock synced | Dashboard: Test connection, Sync drone clock | OK (venue network) |
 | 5 | Venue ArUco map loaded on the drone | `rosparam get /aruco_map/map` = `aruco_map_750x450_id100.txt` | OK |
 | 6 | Thermal service running, real temperatures | `/thermal/temp` 24.7 Hz, room ~20 °C | OK |
-| 7 | Neural networks load on the NPU | Mission start log: thermal_fire, fire, weights "running on the NPU" | OK |
-| 8 | Safety tests pass on the drone | `python3 tests/test_flight_safety.py` | OK, 22/22 |
+| 7 | Neural networks load on the NPU | Mission start log: thermal_fire, fire "running on the NPU" | OK |
+| 8 | Safety tests pass on the drone | `python3 tests/test_flight_safety.py` | OK |
 | 9 | Thermal network tests pass on the drone | `python3 tests/test_thermal_nn.py` | OK, 8/8 |
 | 10 | Mission config: area, home, fence inside the marker field | Mission refuses to start otherwise | OK |
-| 11 | Drone on the home position (field centre) | Visual | Filled at the test |
+| 11 | Drone on the home position (field centre); survey altitude above the tallest tree | Visual, dashboard mission settings | Filled at the test |
 | 12 | Screen and video recording started | — | Filled at the test |
 
 **Can the system be started and the planned tests initiated?** Yes. The mission starts with one click and passes pre-flight; the last complete survey flights were on 10 Nov.

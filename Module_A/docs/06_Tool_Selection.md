@@ -31,7 +31,7 @@ Parameters: latency per frame on the Orange Pi (ms), identical output to the ref
 |---|---|---|---|
 | RGB flame model, 416 px | 228 ms | **40 ms** | 12/12 validation images |
 | Thermal model, 256 px | 83 ms | **13.4 ms** | 117/117 flight frames |
-| Full mission (three networks), in flight | ~1.5 FPS (first flight, CPU) | **13–14 FPS** | — |
+| Full mission, in flight | ~1.5 FPS (first flight, CPU) | **13–14 FPS** | — |
 
 **Choice: RKNN.** The CPU cannot reach the required 10 FPS. ONNX stays in the repository as the fallback: the mission uses it automatically if the NPU runtime is missing.
 

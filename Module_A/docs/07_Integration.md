@@ -18,7 +18,7 @@
 | Administration | SSH `:22` | — | — | Password or key |
 | Battery for the dashboard | `rostopic echo -p /mavros/battery` over SSH | CSV | 0.5 Hz | — |
 
-Snapshot of the drone's interfaces and parameters: [`../evidence/drone_config/`](../evidence/drone_config/).
+Snapshot of the drone's interfaces and parameters: [`../../Others/evidence/drone_config/`](../../Others/evidence/drone_config/).
 
 ## 7.2 Two connection configurations
 
@@ -40,7 +40,7 @@ All in [`../config/case1_fire.yaml`](../config/case1_fire.yaml). Most can also b
 | Group | Parameters |
 |---|---|
 | Area and route | `area`, `home`, `altitude`, `takeoff_z`, `speed`, `overlap` / `step`, `survey_camera` |
-| Inspection | `inspect.enabled`, `inspect.z`, `inspect.hover` |
+| Photos of a source | `snapshot_hover` (seconds the drone holds position), `inspect.enabled` (close inspection, off at this venue) |
 | Cameras | `type` (ros / ros_thermal / cv), `topic`, `device`, `hfov_deg`, `orientation`, `image_up_is_forward` |
 | Detectors | `model`, `conf`, `classes`, `every`, `min_temp_c`, `threshold_c`, `min_area` |
 | Tracking | `tracker.radius`, `tracker.min_hits`, `tracker.same_object`, `class_alias`, `self_calibrate`, `min_detect_altitude` |

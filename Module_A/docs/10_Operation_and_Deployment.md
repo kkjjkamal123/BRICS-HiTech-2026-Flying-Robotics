@@ -46,7 +46,7 @@ bash setup/build_dashboard.sh              # builds "BRICS Dashboard.app" inside
 
 1. Mission Control → **Run mission**. The drone shows a 3 s countdown (ABORT cancels), then takes off.
 2. Watch the live map: each source appears once with class, temperature and time; the event list shows every detection.
-3. The drone surveys, inspects each source, returns home and lands by itself. **Return Home** can be pressed at any time.
+3. The drone surveys, stops briefly to photograph each source (it never descends towards it), returns home and lands by itself. **Return Home** can be pressed at any time.
 4. Results: Dashboard → **Results** (path, detections, snapshots, frame-rate statistics). Files are in `runs/case1_fire_<date>_<time>/` on the drone.
 
 Command-line equivalent on the drone:
@@ -78,6 +78,6 @@ cd ~/brics_toolkit && python3 drone/case1_fire.py --config config/case1_fire.yam
 ## 10.7 Scaling and further integration
 
 * **Larger areas:** replace the ArUco map with GNSS/RTK (outdoors) or visual-inertial odometry; the mission uses `frame_id` and `area` from the config, so the survey logic stays the same.
-* **More drones:** the code already contains a planner that splits an area into zones for several drones with separate altitude layers (`drone/case3_planner.py`, `drone/case3_swarm_agent.py`).
+* **More drones:** the mission engine is per drone; several drones can survey separate zones of a larger area, each with its own altitude.
 * **Other targets:** any new object class needs only a dataset and a training run (`train/train.py --data <dataset> --name <model>`), then the model path in the config.
 * **Integration with the customer's systems:** the mission link already outputs JSON events with map coordinates; converting `aruco_map` metres to geographic coordinates is a single transform once GNSS is used.

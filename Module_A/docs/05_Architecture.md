@@ -6,9 +6,9 @@
 |---|---|---|---|---|
 | Thermal node | `tools/thermal_node.py`, `common/thermal.py` | USB frame 256 × 384 YUYV from the TR256i | `/thermal/temp` (32FC1, °C per pixel), `/thermal/image_raw` (false colour with °C scale), `/thermal/max`, `/thermal/fire` | Real temperatures from the raw half of the frame (Kelvin × 64) |
 | Cameras | `drone/camera.py` | `main_camera/image_raw` + `camera_info`; `thermal/temp` | Frame + drone pose at capture time; pixel → map conversion | One interface for real, simulated and USB cameras |
-| Detectors | `common/detector.py` | RGB image, thermal image, °C map | Boxes: class, confidence, pixel, °C | Thermal YOLO (`fire`, `flame`), RGB YOLO (`flame`), COCO YOLO (`car`), ≥ 100 °C rule; NPU when available |
+| Detectors | `common/detector.py` | RGB image, thermal image, °C map | Boxes: class, confidence, pixel, °C | Thermal YOLO (`fire`, `flame`), RGB YOLO (`flame`), green-area detector (`tree`), ≥ 100 °C rule; NPU when available |
 | Geometry / tracker | `common/geometry.py`, `common/selfcal.py` | Boxes + pose + camera model | Confirmed objects with map X/Y | Ray-to-floor projection, one entry per physical source, in-flight check of camera mounting and lens scale |
-| Mission engine | `drone/mission_base.py`, `drone/case1_fire.py` | Config, operator commands, objects, telemetry | `navigate` / `land` calls, LED, logs | State machine: survey, inspect, return, land, report |
+| Mission engine | `drone/mission_base.py`, `drone/case1_fire.py` | Config, operator commands, objects, telemetry | `navigate` / `land` calls, LED, snapshots, logs | State machine: survey, hold and photograph, return, land, report |
 | Drone API + safety | `drone/technic_api.py` | SKYRIS services, MAVROS | Telemetry, safety decisions | Fence, battery, marker loss, arming failure, land fallback |
 | Mission link | `common/ui_server.py` | Mission state | HTTP JSON status, MJPEG video, commands | Connection to the operator app |
 | BRICS Dashboard | `dashboard/` (Swift) | HTTP 8090, video 8080, SSH | Operator view and commands | Ground station |
@@ -53,7 +53,7 @@ sequenceDiagram
     M->>M: detect → map → tracker (every frame)
     alt new source confirmed (4 hits)
       M->>Op: alarm + object on map
-      M->>P: fly over, descend to 1.0 m, hover 3 s, snapshot, climb
+      M->>P: hold position 2 s at survey height, photos from both cameras
     end
   end
   Op-->>M: Return Home (any time)
@@ -80,7 +80,7 @@ sequenceDiagram
 
 **Strengths**
 
-1. **Real-time edge processing meets the frame-rate requirement in flight.** With all networks on the NPU, the full mission processed 13–14 FPS per stream and ≥ 10 FPS in 98–100 % of airborne seconds (flights 18:57, 21:11, 21:20: [`evidence/flights/*/fps_summary.json`](../evidence/flights/)).
+1. **Real-time edge processing meets the frame-rate requirement in flight.** With all networks on the NPU, the full mission processed 13–14 FPS per stream and ≥ 10 FPS in 98–100 % of airborne seconds (flights 18:57, 21:11, 21:20: [`Others/evidence/flights/*/fps_summary.json`](../../Others/evidence/flights/)).
 2. **Two physically different sensors plus temperature.** The thermal network finds hot sources by shape, the °C map confirms them, and the RGB network sees the flame. Each source is mapped once (flight 18:57: one heater mapped 3×; after the tracker change: one entry per source).
 3. **Configuration-driven and simulation-backed.** The same code runs against a simulated drone and cameras ([`tests/sim_case1_venue.py`](../tests/sim_case1_venue.py): 8 scenarios with wrong lenses, flipped cameras and position noise, each finding exactly one fire and one flame within 0.05 m).
 

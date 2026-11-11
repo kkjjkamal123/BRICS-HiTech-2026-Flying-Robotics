@@ -17,15 +17,16 @@
 | Land refused | Retry, then PX4 AUTO.LAND; if the pilot is in a manual mode, hands off to the pilot | `technic_api._land_fallback` |
 | Duplicate start | Second mission instance refuses to start | lock file `/tmp/brics_mission.lock` |
 | False alarms | 4 consistent sightings before an alarm; no detections below 0.6 m; thermal network boxes must be really hot | `config/case1_fire.yaml` |
-| PX4 failsafes | RC loss → Land (`NAV_RCL_ACT=3`), low battery action (`COM_LOW_BAT_ACT=2`) | [`evidence/drone_config/px4_params.txt`](../evidence/drone_config/px4_params.txt) |
+| PX4 failsafes | RC loss → Land (`NAV_RCL_ACT=3`), low battery action (`COM_LOW_BAT_ACT=2`) | [`Others/evidence/drone_config/px4_params.txt`](../../Others/evidence/drone_config/px4_params.txt) |
 
-Unit tests for these rules: [`../tests/test_flight_safety.py`](../tests/test_flight_safety.py) (22 tests, all pass on the drone, 11 Nov 2026).
+Unit tests for these rules: [`../tests/test_flight_safety.py`](../tests/test_flight_safety.py) (all pass on the drone, 11 Nov 2026).
 
 ## 8.2 Safe operation: hardware, mounts and cables
 
-* Props inside the SKYRIS clip-on guards; landing legs are the lowest point (thermal mount ~17 mm above the floor in the CAD check).
+* Props inside the SKYRIS clip-on guards; landing legs are the lowest point.
+* The drone never descends towards a source or a tree: it photographs from survey height, so it keeps its distance from the tall artificial trees.
 * The thermal camera sits in a cradle with crush ribs and is held by two straps through the mount's slots; its USB cable is tied to the anchor tab so it cannot reach the props.
-* All connectors (XT60, MR30, JST, USB) are plugged, not soldered, and follow the SKYRIS assembly guide; the wiring diagram lists every connection: [`../cad/out/TECHNIC6S_wiring_diagram.pdf`](../cad/out/TECHNIC6S_wiring_diagram.pdf).
+* All connectors (XT60, MR30, JST, USB) are plugged, not soldered, and follow the SKYRIS assembly guide.
 * Before every flight the pre-test checklist ([09](09_Pretest_Checklist.md)) checks props, frame, cables and the kill switch.
 
 ## 8.3 Maintainability
@@ -33,7 +34,6 @@ Unit tests for these rules: [`../tests/test_flight_safety.py`](../tests/test_fli
 | What | How it is replaced or changed without rebuilding the system |
 |---|---|
 | Thermal camera | Unplug USB, slide out of the cradle; the node reopens the device automatically |
-| Thermal mount | Two straps; STL/STEP in `cad/out/`, parametric script `cad/fusion_thermal_mount.py` |
 | Battery, props | Standard platform parts |
 | Mission parameters | YAML or the dashboard; no code change ([07](07_Integration.md)) |
 | Neural networks | Replace the model folder; ONNX fallback is automatic if the NPU model is missing |
