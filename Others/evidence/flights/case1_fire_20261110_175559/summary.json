@@ -1,0 +1,37 @@
+{
+ "result": "ABORT: navigate to (2.70, 0.85, 0.63 aruco_map) rejected: Copter is not in OFFBOARD mode, use auto_arm?",
+ "duration_s": 38.6,
+ "distance_m": 4.22,
+ "mock": false,
+ "objects": 2,
+ "counts": {
+  "fire": 2
+ },
+ "case": "case1_fire",
+ "fps": {
+  "rgb": {
+   "run": {
+    "seconds": 45,
+    "mean_fps": 1.0,
+    "pct_seconds_ge_10": 0.0
+   },
+   "airborne": {
+    "seconds": 38,
+    "mean_fps": 1.0,
+    "pct_seconds_ge_10": 0.0
+   }
+  },
+  "thermal": {
+   "run": {
+    "seconds": 45,
+    "mean_fps": 1.0,
+    "pct_seconds_ge_10": 0.0
+   },
+   "airborne": {
+    "seconds": 38,
+    "mean_fps": 1.0,
+    "pct_seconds_ge_10": 0.0
+   }
+  }
+ }
+}

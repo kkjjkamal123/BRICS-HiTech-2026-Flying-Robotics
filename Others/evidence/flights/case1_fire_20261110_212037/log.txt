@@ -1,0 +1,26 @@
+21:20:37 [safety] geofence x -3.00..3.00  y -1.50..1.50 m, max altitude 3.0 m (from config)
+21:20:38 [phase] STARTING taking off in 3 s - ABORT cancels
+21:20:39 [phase] STARTING taking off in 2 s - ABORT cancels
+21:20:39 [battery] FC reports 23.40 V per cell -> using 6 cells: 3.90 V/cell
+21:20:40 [phase] STARTING taking off in 1 s - ABORT cancels
+21:20:41 [phase] PREFLIGHT 
+21:20:43 [preflight] aruco_map not visible from the ground - OK, waiting for it after take-off
+21:20:43 [phase] TAKEOFF 
+21:20:43 [drone] takeoff to 1.00 m
+21:20:54 [phase] MISSION 
+21:20:54 [plan] survey area [-2.5, -1.0, 2.5, 1.0] at z=1.50, line spacing 0.84 m
+21:21:33 [detect] CONFIRMED #1 flame at (-2.88, 0.54) conf 0.66
+21:21:33 [ALARM] IGNITION SOURCE #1 at (-2.88, 0.53)
+21:21:34 [phase] INSPECT object #1 flame
+21:21:45 [phase] MISSION resume
+21:21:58 [detect] CONFIRMED #2 flame at (2.56, 0.59) conf 0.71
+21:21:58 [ALARM] IGNITION SOURCE #2 at (2.55, 0.59)
+21:21:59 [phase] INSPECT object #2 flame
+21:22:08 [phase] MISSION resume
+21:22:24 [phase] RETURN 
+21:22:32 [phase] LAND completed
+21:22:32 [drone] landing
+21:22:40 [drone] landed
+21:22:40 [phase] REPORT 
+21:22:41 [phase] DONE completed
+21:22:41 [report] /home/orangepi/brics_toolkit/runs/case1_fire_20261110_212037
