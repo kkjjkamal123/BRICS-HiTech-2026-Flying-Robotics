@@ -14,9 +14,17 @@
 
 BRICS Hi-Tech Future Skills 2026 · Flying Robotics · Case 1 (University 2035)
 
-[technical report](Module_A_Technicalreport.pdf) / [docs](Module_A/README.md) / [evidence](#evidence) / [flight logs](Others/evidence/) / [limitations](#known-limitations)
+[Module A report](Module_A_Technicalreport.pdf) / [Module B test report](Module_B_Test_Report.pdf) / [Module C economics](Module_C_Economic_Assessment.pdf) / [docs](Module_A/README.md) / [evidence](#evidence) / [flight logs](Others/evidence/) / [limitations](#known-limitations)
 
 </div>
+
+## Competition reports
+
+| Module | Report | Source |
+|---|---|---|
+| A - Engineering design and development | [Module_A_Technicalreport.pdf](Module_A_Technicalreport.pdf) | [Module_A/](Module_A/) |
+| B - Prototype functional verification | [Module_B_Test_Report.pdf](Module_B_Test_Report.pdf) | [Module_B/](Module_B/) (LaTeX, figure script) |
+| C - Economic feasibility assessment | [Module_C_Economic_Assessment.pdf](Module_C_Economic_Assessment.pdf) | [Module_C/](Module_C/) (LaTeX, economic model) |
 
 ## Quick start
 
