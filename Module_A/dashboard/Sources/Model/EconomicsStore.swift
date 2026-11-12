@@ -47,6 +47,7 @@ final class EconomicsStore {
     private(set) var cashFlow: [CashFlowYear] = []
     private(set) var verdict = ""
     private(set) var loaded = false
+    private(set) var attempted = false
     let root: URL
 
     init(root: URL) { self.root = root }
@@ -102,7 +103,7 @@ final class EconomicsStore {
         }
         // KPI table rows: | Label | **value** | note |
         var k: [EconKPI] = []
-        for raw in md.split(separator: "\n") {
+        for raw in md.split(whereSeparator: \.isNewline) {
             let cells = raw.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
             guard cells.count == 3 else { continue }
             let label = cells[0]
@@ -112,16 +113,17 @@ final class EconomicsStore {
             }
         }
         kpis = k
-        if let v = md.split(separator: "\n").first(where: { $0.contains("ECONOMICALLY") }) {
+        if let v = md.split(whereSeparator: \.isNewline).first(where: { $0.contains("ECONOMICALLY") }) {
             verdict = v.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "The project is ", with: "")
         }
         var cum = 0.0
-        cashFlow = csv.split(separator: "\n").dropFirst().compactMap { row in
+        cashFlow = csv.split(whereSeparator: \.isNewline).dropFirst().compactMap { row in
             let c = row.split(separator: ",")
             guard c.count == 2, let y = Int(c[0]), let n = Double(c[1]) else { return nil }
             cum += n
             return CashFlowYear(year: y, net: n, cumulative: cum)
         }
         loaded = !capex.isEmpty
+        attempted = true
     }
 }

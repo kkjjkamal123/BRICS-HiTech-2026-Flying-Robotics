@@ -178,8 +178,8 @@ private extension RunSummary {
 
     var kindTag: String? {
         switch kind {
-        case .mission: isMock ? "SIM" : "FLIGHT"
-        case .hover, .roam: "TEST"
+        case .mission: isMock ? "Sim" : "Flight"
+        case .hover, .roam: "Test"
         }
     }
 
@@ -255,7 +255,6 @@ private struct RunBrowser: View {
         Text(visible.count == allCount ? "\(allCount)" : "\(visible.count) of \(allCount)")
             .font(Theme.mono(10.5))
             .foregroundStyle(Theme.textTertiary)
-            .contentTransition(.numericText())
     }
 
     private var emptyToggle: some View {
@@ -431,12 +430,10 @@ private struct DayHeader: View {
     var body: some View {
         HStack {
             Text(date.map { $0.formatted(Fmt.day) } ?? "Undated")
-                .textCase(.uppercase)
             Spacer()
             Text("\(count)")
         }
-        .font(Theme.mono(10, .medium))
-        .tracking(0.5)
+        .font(Theme.mono(11, .medium))
         .foregroundStyle(Theme.textTertiary)
         .padding(.horizontal, 10)
         .padding(.top, 10)
@@ -460,10 +457,9 @@ private struct RunRow: View {
                         .foregroundStyle(selected ? Theme.textPrimary : Theme.textPrimary.opacity(0.88))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    if let tag = run.kindTag, tag != "SIM" {
+                    if let tag = run.kindTag, tag != "Sim" {
                         Text(tag)
-                            .font(Theme.mono(8.5, .semibold))
-                            .tracking(0.4)
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(Theme.textTertiary)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -699,6 +695,7 @@ private struct LoadedRun: Sendable {
 // MARK: - Detail pane
 
 private struct RunDetailPane: View {
+    @Environment(AppModel.self) private var model
     let run: RunSummary
     let loaded: LoadedRun?
     let loading: Bool
@@ -747,7 +744,7 @@ private struct RunDetailPane: View {
     private func map(_ l: LoadedRun) -> some View {
         let d = l.detail
         let objects = d.objects.map {
-            MapObject(id: "\($0.id)", label: "#\($0.id) \($0.name)", name: $0.name, x: $0.x, y: $0.y,
+            MapObject(id: "\($0.id)", label: "#\($0.id) \(Theme.label(forObject: $0.name))", name: $0.name, x: $0.x, y: $0.y,
                       time: $0.confirmed?.formatted(Fmt.time))
         }
         return GlassCard(padding: 14) {
@@ -757,7 +754,8 @@ private struct RunDetailPane: View {
                 if d.path.isEmpty && objects.isEmpty {
                     QuietEmpty(text: "No path recorded in this run").frame(height: wide ? 300 : 260)
                 } else {
-                    FieldMap(area: d.area, home: d.path.first.map { [$0.x, $0.y] }, drone: nil, track: d.path, objects: objects)
+                    FieldMap(area: d.area, home: d.path.first.map { [$0.x, $0.y] }, drone: nil, track: d.path, objects: objects,
+                             arena: model.arena)
                         .frame(height: wide ? 300 : 260)
                         .clipShape(.rect(cornerRadius: 8))
                 }
@@ -773,7 +771,7 @@ private struct RunDetailPane: View {
     }
 
     private func missionReadouts(_ l: LoadedRun) -> [Readout] {
-        let counts = Dictionary(grouping: l.detail.objects, by: \.name).map { "\($0.value.count) \($0.key)" }.sorted().joined(separator: " · ")
+        let counts = Dictionary(grouping: l.detail.objects, by: \.name).map { "\($0.value.count) \(Theme.label(forObject: $0.key).lowercased())" }.sorted().joined(separator: " · ")
         let fps = run.fps?.best(camera: "thermal")
         return [
             Readout(title: "Result", value: run.resultText.capitalized, color: run.statusColor, footnote: run.isMock ? "simulation" : "flight"),
@@ -819,7 +817,7 @@ private struct DetailHeader: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
-                    StatusPill(text: run.resultText, color: run.statusColor).fixedSize()
+                    StatusPill(text: run.resultText.capitalized, color: run.statusColor).fixedSize()
                     if let tag = run.kindTag { StatusPill(text: tag, color: Theme.textSecondary).fixedSize() }
                 }
                 Text(subtitle)
@@ -886,9 +884,8 @@ private struct ReadoutCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(cell.title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.7)
+            Text(cell.title)
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.textTertiary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -903,7 +900,6 @@ private struct ReadoutCell: View {
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .contentTransition(.numericText())
                 if let unit = cell.unit {
                     Text(unit).font(Theme.mono(11)).foregroundStyle(Theme.textSecondary).fixedSize()
                 }
@@ -997,14 +993,16 @@ private struct FPSChartCard: View {
                 .foregroundStyle(Theme.caution.opacity(0.7))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 .annotation(position: .top, alignment: .trailing, spacing: 2) {
-                    Text("10 FPS TARGET").font(Theme.mono(9, .semibold)).foregroundStyle(Theme.caution.opacity(0.85))
+                    Text("10 FPS target").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.caution.opacity(0.85))
                 }
             ForEach(lastPoints) { p in
                 PointMark(x: .value("s", p.x), y: .value("FPS", p.y))
                     .symbolSize(18)
                     .foregroundStyle(p.series == primary ? Theme.signal : Theme.textSecondary)
                     .annotation(position: .top, alignment: .trailing, spacing: 4) {
-                        Text(p.series).font(Theme.mono(9.5)).foregroundStyle(Theme.textSecondary)
+                        if loaded.fpsSeriesNames.count > 1 {
+                            Text(p.series).font(.system(size: 10)).foregroundStyle(Theme.textSecondary)
+                        }
                     }
             }
         }
@@ -1174,9 +1172,8 @@ private struct ObjectsTable: View {
     }
 
     private func head(_ t: String, _ w: CGFloat, _ a: Alignment) -> some View {
-        Text(t.uppercased())
-            .font(.system(size: 10, weight: .semibold))
-            .tracking(0.6)
+        Text(t)
+            .font(.system(size: 11, weight: .medium))
             .foregroundStyle(Theme.textTertiary)
             .frame(width: w, alignment: a)
     }
@@ -1193,7 +1190,7 @@ private struct ObjectRow: View {
             HStack(spacing: 6) {
                 Image(systemName: Theme.symbol(forObject: object.name)).font(.system(size: 10))
                     .foregroundStyle(Theme.color(forObject: object.name))
-                Text(object.name.capitalized).font(.system(size: 12.5)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                Text(Theme.label(forObject: object.name)).font(.system(size: 12.5)).foregroundStyle(Theme.textPrimary).lineLimit(1)
             }
             .frame(width: w.cls, alignment: .leading)
             mono(String(format: "%.2f", object.x), w.num)

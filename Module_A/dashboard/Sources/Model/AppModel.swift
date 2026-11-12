@@ -15,6 +15,8 @@ final class AppModel {
     var showMissionSettings = false
     /// REC button: records the main and / or thermal pane to .mp4 files in runs/recordings/.
     let recorder = FlightRecorder()
+    /// The real arena floor (official ArUco map in config/): drawn under every map.
+    private(set) var arena: ArenaMap?
     private var autoRecordStarted = false
     let mission: MissionClient
     let console = ProcessConsole()
@@ -32,6 +34,7 @@ final class AppModel {
         let root = settings.toolkitRoot
         mission = MissionClient()
         mission.recorder = recorder
+        arena = ArenaMap.load(toolkit: root)
         runs = RunsStore(root: root)
         economics = EconomicsStore(root: root)
         spec = SpecStore()
@@ -55,6 +58,7 @@ final class AppModel {
         aiModel.reload()
         MissionLogArchive.mirror(runsDir: settings.toolkitRoot.appending(path: "runs"))
         watchForFinishedFlights()
+        watchDroneAddress()
         // `-autoRecordSeconds 8`: record both panes for N seconds after launch (self-test of the REC button)
         let secs = UserDefaults.standard.double(forKey: "autoRecordSeconds")
         if secs > 0, !autoRecordStarted {
@@ -68,6 +72,24 @@ final class AppModel {
             }
         }
     }
+
+    /// Return / Land / Abort from any button or shortcut: over the mission link when it is up, otherwise over SSH
+    /// when the drone answers (the dashboard has no HTTP link to the mission script, e.g. a weak Wi-Fi link).
+    func command(_ c: MissionCommand) {
+        guard !mission.connected, settings.missionSource == .drone, mission.droneReachable else {
+            mission.send(c)
+            return
+        }
+        let link = DroneLink(settings: settings, console: console)
+        switch c {
+        case .returnHome: link.returnHomeNow()
+        case .land, .abort: link.landNow()
+        case .start: mission.send(c)
+        }
+    }
+
+    /// A Return / Land / Abort can reach the drone: mission link up, or the drone answers for the SSH path.
+    var canCommand: Bool { mission.connected || (settings.missionSource == .drone && mission.droneReachable) }
 
     /// Which mission UI the live view listens to: the real drone or the local simulator.
     func applyMissionSource() {
@@ -91,6 +113,50 @@ final class AppModel {
         applyMissionSource()
     }
 
+    // MARK: Find the drone on the Wi-Fi
+
+    /// Drone search: (hosts checked, hosts total) while it runs.
+    private(set) var droneSearchProgress: (done: Int, total: Int)?
+    private(set) var droneSearchResult: [String]?
+    var droneSearching: Bool { droneSearchProgress != nil }
+
+    /// Scans this Mac's Wi-Fi for the drone. If the saved address is not among those found, connects to the first. Returns what it found.
+    @discardableResult
+    func findDrone() async -> [String] {
+        guard !droneSearching else { return droneSearchResult ?? [] }
+        droneSearchProgress = (0, 0)
+        droneSearchResult = nil
+        let found = await DroneFinder.search(videoPort: settings.videoPort,
+                                             hint: [settings.droneHost] + settings.recentHosts) { [weak self] d, t in
+            self?.droneSearchProgress = (d, t)
+        }
+        droneSearchProgress = nil
+        droneSearchResult = found
+        if let first = found.first, !found.contains(settings.droneHost) { connectToDrone(host: first) }
+        return found
+    }
+
+    /// The venue Wi-Fi gives the drone a new address after a reboot / reconnect. When the saved address stops
+    /// answering for ~20 s, search the Wi-Fi and follow the drone to its new address.
+    private func watchDroneAddress() {
+        Task { [weak self] in
+            var misses = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard let self else { return }
+                guard self.settings.missionSource == .drone, !self.droneSearching else { misses = 0; continue }
+                let host = self.settings.droneHost
+                var ok = await PortProbe.isOpen(host: host, port: self.settings.videoPort, timeout: 3)
+                if !ok { ok = await PortProbe.isOpen(host: host, port: 22, timeout: 3) }
+                misses = ok ? 0 : misses + 1
+                if misses >= 2 {
+                    misses = 0
+                    await self.findDrone()
+                }
+            }
+        }
+    }
+
     // MARK: Drone mission
 
     /// The mission runs (or is about to) on the drone: Run mission is not allowed then.
@@ -107,7 +173,9 @@ final class AppModel {
         settings.missionSource = .drone
         applyMissionSource()
         mission.clearForNewMission()
-        DroneLink(settings: settings, console: console).launchMission(settings: missionSettings.setArguments)
+        DroneLink(settings: settings, console: console)
+            .launchMission(settings: missionSettings.launcherArguments,
+                           title: "Case 1 mission (drone) · \(missionSettings.kind.short)")
     }
 
     // MARK: Mission logs -> Desktop
@@ -172,12 +240,13 @@ final class AppModel {
         settings.missionSource = .simulator
         applyMissionSource()
         let root = settings.toolkitRoot
-        var args = [root.appending(path: "drone/case1_fire.py").path(percentEncoded: false),
-                    "--config", root.appending(path: "config/case1_fire.yaml").path(percentEncoded: false),
+        let kind = missionSettings.kind
+        var args = [root.appending(path: kind.script).path(percentEncoded: false),
+                    "--config", root.appending(path: kind.config).path(percentEncoded: false),
                     "--mock", "--time-scale", String(timeScale),
                     "--ui-port", String(settings.simulatorPort), "--keep-ui", "600"] + missionSettings.setArguments
         if autostart { args.append("--autostart") }
-        let job = console.run(title: "Simulation · Case 1 mission",
+        let job = console.run(title: "Simulation · \(kind.short)",
                               executable: settings.pythonURL,
                               arguments: args,
                               workingDirectory: root,

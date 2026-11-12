@@ -11,11 +11,8 @@ struct RootView: View {
                 .navigationSplitViewColumnWidth(min: 220, ideal: 236, max: 280)
         } detail: {
             detail
-                .id(model.section)
-                .transition(.opacity)
-                .toolbar { MainToolbar() }
         }
-        .animation(.easeInOut(duration: 0.18), value: model.section)
+        .toolbar { MainToolbar() }
         .overlay(alignment: .top) { DetectionToast() }
         .sheet(isPresented: $model.showMissionSettings) { MissionSettingsSheet().environment(model) }
         .preferredColorScheme(.dark)
@@ -159,12 +156,12 @@ private struct MainToolbar: ToolbarContent {
             ActivityField()
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            Button("Return Home", systemImage: "house") { model.mission.send(.returnHome) }
+            Button("Return Home", systemImage: "house") { model.command(.returnHome) }
                 .help("Return home and land  ⇧⌘H")
-                .disabled(!model.mission.connected)
-            Button("Land", systemImage: "airplane.arrival") { model.mission.send(.land) }
+                .disabled(!model.canCommand)
+            Button("Land", systemImage: "airplane.arrival") { model.command(.land) }
                 .help("Land where it is now  ⇧⌘L")
-                .disabled(!model.mission.connected)
+                .disabled(!model.canCommand)
         }
     }
 }
@@ -241,7 +238,7 @@ private struct DetectionToast: View {
                         .frame(width: 30, height: 30)
                         .background(Theme.color(forObject: d.name).opacity(0.15), in: .rect(cornerRadius: 8))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(d.name.capitalized) #\(d.id ?? 0) confirmed")
+                        Text("\(Theme.label(forObject: d.name)) #\(d.id ?? 0) confirmed")
                             .font(.system(size: 13, weight: .semibold))
                         Text(String(format: "x %.2f  y %.2f m  ·  %.0f%%  ·  %@", d.x ?? .nan, d.y ?? .nan, (d.conf ?? 0) * 100, d.time ?? ""))
                             .font(Theme.mono(11))

@@ -30,7 +30,7 @@ final class DashboardSettings {
         droneHost = defaults.string(forKey: "droneHost") ?? "10.42.0.1"
         recentHosts = defaults.stringArray(forKey: "recentHosts") ?? []
         sshUser = defaults.string(forKey: "sshUser") ?? "orangepi"
-        sshPassword = defaults.string(forKey: "sshPassword") ?? ""
+        sshPassword = defaults.string(forKey: "sshPassword") ?? "orangepi"
         missionPort = DashboardSettings.int(defaults, "missionPort") ?? 8090
         videoPort = DashboardSettings.int(defaults, "videoPort") ?? 8080
         simulatorPort = DashboardSettings.int(defaults, "simulatorPort") ?? 8095
@@ -76,7 +76,7 @@ final class DashboardSettings {
             dir = dir.deletingLastPathComponent()
             candidates.append(dir)
         }
-        candidates.append(fm.homeDirectoryForCurrentUser.appending(path: "BRICS-HiTech-2026-Flying-Robotics/Module_A"))
+        candidates.append(fm.homeDirectoryForCurrentUser.appending(path: "Documents/Projects/Claude/russia/brics_toolkit"))
         return candidates.first { fm.fileExists(atPath: $0.appending(path: "drone/mission_base.py").path(percentEncoded: false)) }
     }
 }

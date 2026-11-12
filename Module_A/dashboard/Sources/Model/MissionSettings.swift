@@ -13,14 +13,14 @@ final class MissionSettings {
     enum Venue {
         static let markerField: [Double] = [-3.0, -1.5, 3.0, 1.5]       // outer marker centres
         static let area: [Double] = [-2.5, -1.0, 2.5, 1.0]
-        static let fence: [Double] = [-3.0, -1.5, 3.0, 1.5]
+        static let fence: [Double] = [-3.4, -1.9, 3.4, 1.9]          // outer markers + 0.4 m (mat edge is + 0.75 m)
         static let home: [Double] = [0.0, 0.0]
-        static let altitude = 1.5
+        static let altitude = 2.9
         static let spacing = 0.8
         static let overlap = 0.3
         static let speed = 0.4
-        static let fireC = 100.0
-        static let maxAltitude = 3.0                                     // safety.max_altitude
+        static let fireC = 60.0         // the real heat disc reads 52-88 C on the TR256i from flight height
+        static let maxAltitude = 3.2                                     // safety.max_altitude (room 3.5 m high)
         static let maxTime = 540.0                                       // safety.max_time, s
         /// Thermal camera (survey_camera) 256 x 192, horizontal FOV 56 deg -> vertical FOV from the same focal length.
         static let thermalHFOV = 56.0
@@ -29,13 +29,41 @@ final class MissionSettings {
             return 2 * atan(96.0 / fx) * 180 / .pi
         }
         /// The mission refuses a geofence reaching more than this beyond the markers (no position out there).
-        static let markerTolerance = 0.3
+        static let markerTolerance = 0.45
+        /// How far the boundary may reach past the outer marker centres (drone/mission_base.py FENCE_BEYOND_MARKERS).
+        static let fenceBeyondMarkers = 0.4
         /// Bounding box of the marker centres the mission reports (the map loaded on the drone), else the official field.
         static func markerField(from markers: [[Double]]?) -> [Double] {
             let pts = (markers ?? []).filter { $0.count >= 2 }
             guard pts.count >= 2 else { return markerField }
             let xs = pts.map { $0[0] }, ys = pts.map { $0[1] }
             return [xs.min()!, ys.min()!, xs.max()!, ys.max()!]
+        }
+    }
+
+    /// Which flight Run mission starts.
+    enum Kind: String, CaseIterable, Identifiable {
+        /// drone/case1_fire.py: full Case 1 survey at the survey altitude, line spacing from the camera view
+        case survey
+        /// drone/case1_flame_rth.py: climb to 2.7 m, exactly 3 lines, first confirmed flame -> screenshots -> home
+        case flameRTH
+        var id: String { rawValue }
+        var title: String { self == .survey ? "Full survey" : "Flame → return home" }
+        var short: String { self == .survey ? "Case 1 survey" : "Flame RTH" }
+        var launcherName: String { self == .survey ? "case1" : "flame_rth" }
+        var script: String { self == .survey ? "drone/case1_fire.py" : "drone/case1_flame_rth.py" }
+        var config: String { self == .survey ? "config/case1_fire.yaml" : "config/case1_flame_rth.yaml" }
+        var defaultAltitude: Double { self == .survey ? 2.9 : 2.7 }
+        var minAltitude: Double { self == .survey ? Limit.altitude.lowerBound : Limit.flameRTHMinAltitude }
+    }
+    /// Flame RTH flies exactly this many lines.
+    static let flameRTHLines = 3
+
+    var kind: Kind {
+        didSet {
+            defaults.set(kind.rawValue, forKey: "ms.kind")
+            guard kind != oldValue else { return }
+            altitude = kind.defaultAltitude          // each flight has its own sensible height (2.7 m over the trees)
         }
     }
 
@@ -58,7 +86,8 @@ final class MissionSettings {
 
     /// Hard limits of every setting. Values outside are pulled back as they are typed, so nothing unsafe can be set.
     enum Limit {
-        static let altitude = 0.5...2.5
+        static let altitude = 0.5...3.0      // 0.2 m under the 3.2 m safety ceiling
+        static let flameRTHMinAltitude = 2.0   // trees are 1.5 m tall
         static let spacing = 0.2...2.0
         static let overlap = 0.0...0.6
         static let speed = 0.1...0.8
@@ -70,6 +99,7 @@ final class MissionSettings {
     @ObservationIgnored private var normalizing = false
 
     init() {
+        kind = Kind(rawValue: defaults.string(forKey: "ms.kind") ?? "") ?? .survey
         area = Self.box(defaults, "ms.area") ?? Venue.area
         fence = Self.box(defaults, "ms.fence") ?? Venue.fence
         home = (defaults.array(forKey: "ms.home") as? [Double]).flatMap { $0.count == 2 ? $0 : nil } ?? Venue.home
@@ -100,7 +130,8 @@ final class MissionSettings {
             if abs(c - v) > 0.005 { notes.append(String(format: "%@ limited to %.2f", what, c)) }
             return c
         }
-        let m = markerField
+        let e = Venue.fenceBeyondMarkers
+        let m = [markerField[0] - e, markerField[1] - e, markerField[2] + e, markerField[3] + e]
         var f = fence.count == 4 ? fence : Venue.fence
         f[0] = clamp(f[0], m[0], m[2] - Limit.minFence, "Boundary x from")
         f[2] = clamp(f[2], f[0] + Limit.minFence, m[2], "Boundary x to")
@@ -117,7 +148,8 @@ final class MissionSettings {
         if fence != f { fence = f }
         if area != a { area = a }
         if home != h { home = h }
-        let alt = clamp(altitude, Limit.altitude.lowerBound, Limit.altitude.upperBound, "Altitude")
+        let alt = clamp(altitude, kind.minAltitude, Limit.altitude.upperBound,
+                        kind == .flameRTH ? "Altitude (tree clearance: at least 2.0 m)" : "Altitude")
         if alt != altitude { altitude = alt }
         let sp = clamp(spacing, Limit.spacing.lowerBound, Limit.spacing.upperBound, "Line spacing")
         if sp != spacing { spacing = sp }
@@ -139,18 +171,22 @@ final class MissionSettings {
 
     func resetToVenue() {
         fence = Venue.fence; area = Venue.area; home = Venue.home
-        altitude = Venue.altitude; spacingAuto = true; spacing = Venue.spacing; overlap = Venue.overlap
+        altitude = kind.defaultAltitude; spacingAuto = true; spacing = Venue.spacing; overlap = Venue.overlap
         speed = Venue.speed; fireC = Venue.fireC
     }
 
     var isVenueDefault: Bool {
         func same(_ a: [Double], _ b: [Double]) -> Bool { zip(a, b).allSatisfy { abs($0 - $1) < 0.005 } }
         return same(area, Venue.area) && same(fence, Venue.fence) && same(home, Venue.home)
-            && same([altitude, overlap, speed, fireC], [Venue.altitude, Venue.overlap, Venue.speed, Venue.fireC]) && spacingAuto
+            && same([altitude, overlap, speed, fireC], [kind.defaultAltitude, Venue.overlap, Venue.speed, Venue.fireC]) && spacingAuto
     }
 
-    /// Fence = the whole marker field (the widest boundary the mission accepts).
-    func fenceToMarkerField(_ field: [Double]) { markerField = field; fence = field }
+    /// Fence = the marker field + 0.4 m (the widest boundary the mission accepts; the mat reaches + 0.75 m).
+    func fenceToMarkerField(_ field: [Double]) {
+        markerField = field
+        let e = Venue.fenceBeyondMarkers
+        fence = [field[0] - e, field[1] - e, field[2] + e, field[3] + e]
+    }
     /// Scan area = fence minus a margin on every side.
     func areaInsideFence(margin: Double) {
         area = [fence[0] + margin, fence[1] + margin, fence[2] - margin, fence[3] - margin]
@@ -169,6 +205,10 @@ final class MissionSettings {
     /// y of every survey line. Lines are spread evenly from y0 to y1, at most `effectiveSpacing` apart.
     var surveyLines: [Double] {
         let y0 = area[1], y1 = area[3]
+        if kind == .flameRTH {               // fixed number of lines: y0, middle, y1
+            let n = Self.flameRTHLines - 1
+            return (0...n).map { y0 + (y1 - y0) * Double($0) / Double(max(1, n)) }
+        }
         guard y1 > y0, effectiveSpacing > 0 else { return [y0] }
         let n = max(1, Int(ceil((y1 - y0) / effectiveSpacing - 1e-9)))
         return (0...n).map { y0 + (y1 - y0) * Double($0) / Double(n) }
@@ -204,7 +244,7 @@ final class MissionSettings {
             p.append(String(format: "The boundary reaches %.2f m past the floor markers. Beyond the markers the drone has no position, so the drone refuses to fly.", over))
         }
         if altitude > Venue.maxAltitude - 0.2 { p.append(String(format: "Altitude must stay at least 0.2 m below the %.1f m safety ceiling.", Venue.maxAltitude)) }
-        if altitude < 0.5 { p.append("Altitude must be at least 0.5 m.") }
+        if altitude < kind.minAltitude { p.append(String(format: "Altitude must be at least %.1f m for this flight.", kind.minAltitude)) }
         if !spacingAuto, !(0.2...3.0).contains(spacing) { p.append("Line spacing must be 0.2 to 3.0 m.") }
         if !(30...1000).contains(fireC) { p.append("Fire temperature must be 30 to 1000 °C.") }
         return p
@@ -214,7 +254,7 @@ final class MissionSettings {
     var warnings: [String] {
         var w: [String] = []
         let strip = min(footprint.width, footprint.height)
-        if effectiveSpacing > strip {
+        if kind == .survey, effectiveSpacing > strip {
             w.append(String(format: "Gaps: the lines are %.2f m apart but the thermal camera only sees a %.2f m strip at %.1f m. A small heat source between lines can be missed.",
                             effectiveSpacing, strip, altitude))
         }
@@ -223,7 +263,8 @@ final class MissionSettings {
                             surveySeconds, Venue.maxTime))
         }
         if altitude < 1.0 { w.append("Below 1 m the cameras see a small patch and the floor markers can drop out of view.") }
-        if fireC < 60 { w.append(String(format: "%.0f °C is close to warm laptops, people and batteries: expect false fire alarms.", fireC)) }
+        if fireC < 50 { w.append(String(format: "%.0f °C is close to warm laptops, people and batteries: a hot-looking box that is only that warm would count as fire.", fireC)) }
+        if fireC > 85 { w.append(String(format: "In flight the real heat source measured 52–88 °C on the thermal camera (11 Nov). At %.0f °C most of its detections will be rejected.", fireC)) }
         return w
     }
 
@@ -239,15 +280,22 @@ final class MissionSettings {
 
     /// `--set` arguments for drone/case1_fire.py. Every value is sent, so the run never depends on the YAML defaults.
     var setArguments: [String] {
-        let pairs = ["area=\(list(area))", "safety.fence=\(list(fence))", "home=\(list(home))",
-                     "altitude=\(n(altitude))", spacingAuto ? "step=auto" : "step=\(n(spacing))",
-                     "overlap=\(n(overlap))", "speed=\(n(speed))", "fire_c=\(n(fireC))"]
+        var pairs = ["area=\(list(area))", "safety.fence=\(list(fence))", "home=\(list(home))", "altitude=\(n(altitude))"]
+        if kind == .survey { pairs += [spacingAuto ? "step=auto" : "step=\(n(spacing))", "overlap=\(n(overlap))"] }
+        pairs += ["speed=\(n(speed))", "fire_c=\(n(fireC))"]
         return pairs.flatMap { ["--set", $0] }
     }
 
+    /// Arguments for tools/run_mission.sh on the drone: which flight, then the settings.
+    var launcherArguments: [String] { ["--mission", kind.launcherName] + setArguments }
+
     /// Short text for cards: "5.0 × 2.0 m · 1.5 m · auto 0.84 m · ≥ 100 °C"
     var summary: String {
-        String(format: "%.1f × %.1f m · alt %.1f m · lines %@%.2f m · fire ≥ %.0f °C",
+        if kind == .flameRTH {
+            return String(format: "Flame RTH · %.1f × %.1f m · alt %.1f m · 3 lines · fire ≥ %.0f °C",
+                          area[2] - area[0], area[3] - area[1], altitude, fireC)
+        }
+        return String(format: "%.1f × %.1f m · alt %.1f m · lines %@%.2f m · fire ≥ %.0f °C",
                area[2] - area[0], area[3] - area[1], altitude, spacingAuto ? "auto " : "", effectiveSpacing, fireC)
     }
 }

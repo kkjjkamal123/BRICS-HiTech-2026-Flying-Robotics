@@ -135,7 +135,7 @@ final class RunsStore {
         for f in (try? fm.contentsOfDirectory(at: logs, includingPropertiesForKeys: nil)) ?? [] where f.pathExtension == "csv" {
             let n = f.deletingPathExtension().lastPathComponent
             let kind: RunSummary.Kind = n.hasPrefix("roam") ? .roam : .hover
-            let rows = (try? String(contentsOf: f, encoding: .utf8))?.split(separator: "\n") ?? []
+            let rows = (try? String(contentsOf: f, encoding: .utf8))?.split(whereSeparator: \.isNewline) ?? []
             let last = rows.last.map(String.init) ?? ""
             let dur = Double(last.split(separator: ",").first ?? "") ?? 0
             out.append(RunSummary(id: "log-" + n, kind: kind, folder: f, date: Self.dateFromName(n) ?? .distantPast, isMock: false,
@@ -175,7 +175,7 @@ final class RunsStore {
         if run.kind != .mission {
             // flight-test CSV: t, phase, armed, mode, x, y, z, ...
             let text = (try? String(contentsOf: dir, encoding: .utf8)) ?? ""
-            let rows = text.split(separator: "\n").map { $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }
+            let rows = text.split(whereSeparator: \.isNewline).map { $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }
             guard let header = rows.first else { return d }
             let ix = header.firstIndex(of: "x"), iy = header.firstIndex(of: "y"), iz = header.firstIndex(of: "z"), it = header.firstIndex(of: "t")
             for r in rows.dropFirst() {
@@ -204,7 +204,7 @@ final class RunsStore {
             }
         }
         if let text = try? String(contentsOf: dir.appending(path: "events.csv"), encoding: .utf8) {
-            for (i, line) in text.split(separator: "\n").dropFirst().enumerated() {
+            for (i, line) in text.split(whereSeparator: \.isNewline).dropFirst().enumerated() {
                 let c = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
                 guard c.count >= 10, let t = Double(c[1]) else { continue }
                 d.events.append(RunEvent(id: i, time: Date(timeIntervalSince1970: t), camera: c[2], name: c[3],
@@ -212,7 +212,7 @@ final class RunsStore {
             }
         }
         if let text = try? String(contentsOf: dir.appending(path: "path.csv"), encoding: .utf8) {
-            for line in text.split(separator: "\n").dropFirst() {
+            for line in text.split(whereSeparator: \.isNewline).dropFirst() {
                 let c = line.split(separator: ",").compactMap { Double($0) }
                 if c.count >= 2 { d.path.append(SIMD2(c[0], c[1])) }
                 if c.count >= 3 { d.altitude.append((Double(d.altitude.count), c[2])) }
@@ -221,7 +221,7 @@ final class RunsStore {
         if let text = try? String(contentsOf: dir.appending(path: "perf.csv"), encoding: .utf8) {
             var bins: [String: [Int: Int]] = [:]
             var t0: Double?
-            for line in text.split(separator: "\n").dropFirst() {
+            for line in text.split(whereSeparator: \.isNewline).dropFirst() {
                 let c = line.split(separator: ",").map(String.init)
                 guard c.count >= 2, let t = Double(c[0]) else { continue }
                 if t0 == nil { t0 = t }
@@ -238,7 +238,7 @@ final class RunsStore {
         }
         let snaps = (try? FileManager.default.contentsOfDirectory(at: dir.appending(path: "snapshots"), includingPropertiesForKeys: nil)) ?? []
         d.snapshots = snaps.filter { ["jpg", "png"].contains($0.pathExtension.lowercased()) }.sorted { $0.lastPathComponent < $1.lastPathComponent }
-        d.log = ((try? String(contentsOf: dir.appending(path: "log.txt"), encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+        d.log = ((try? String(contentsOf: dir.appending(path: "log.txt"), encoding: .utf8)) ?? "").split(whereSeparator: \.isNewline).map(String.init)
         // "[plan] survey area [0.0, 0.0, 4.0, 4.0] at z=1.50 ..." -> area rectangle for the map
         if let line = d.log.first(where: { $0.contains("[plan] survey area [") }),
            let start = line.range(of: "area [")?.upperBound,

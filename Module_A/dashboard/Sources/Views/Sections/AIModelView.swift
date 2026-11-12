@@ -41,7 +41,7 @@ private struct Readouts: View {
                      emphasis: map != nil)
             StatTile(title: "NPU format", value: hasRKNN ? "RKNN" : "—", symbol: "cpu",
                      footnote: hasRKNN ? "RK3588S · 6 TOPS" : "RK3588S · export pending")
-            StatTile(title: "Datasets", value: "\(ai.datasets.count)", symbol: "photo.stack",
+            StatTile(title: "Datasets", value: "\(ai.realDatasets.count)", symbol: "photo.stack",
                      footnote: ai.realDatasets.isEmpty ? "Self-test sets only" : ai.realDatasets.joined(separator: ", "))
             StatTile(title: "Base weights", value: "\(ai.weights.count)", symbol: "shippingbox",
                      footnote: ai.weights.first.map { ai.weights.count > 1 ? "\($0) + \(ai.weights.count - 1) more" : $0 } ?? "weights/ is empty")
@@ -86,7 +86,7 @@ private struct PipelinePanel: View {
         return [
             PipelineStep(id: "Collect", symbol: "camera.metering.spot",
                          detail: "TR256i frames at 1–2 m: fires and hard negatives",
-                         status: collected ? "\(ai.realDatasets.count) dataset(s)" : "no field data yet", state: collected ? .done : .pending),
+                         status: collected ? (ai.realDatasets.count == 1 ? "1 dataset" : "\(ai.realDatasets.count) datasets") : "no field data yet", state: collected ? .done : .pending),
             PipelineStep(id: "Auto-label", symbol: "wand.and.rays",
                          detail: "autolabel.py --thermal: hot spot → box",
                          status: "operator step", state: .manual),
@@ -158,9 +158,8 @@ private struct StepView: View {
             .padding(.trailing, 14)
             HStack(spacing: 6) {
                 Circle().fill(step.state.color).frame(width: 5, height: 5)
-                Text(step.status.uppercased())
-                    .font(Theme.mono(10, .medium))
-                    .tracking(0.3)
+                Text(step.status)
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(step.state == .manual ? Theme.textTertiary : step.state == .pending ? Theme.textSecondary : step.state.color)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -188,8 +187,8 @@ private struct TrainRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text("DATASET")
-                .font(.system(size: 10.5, weight: .semibold)).tracking(0.8)
+            Text("Dataset")
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.textTertiary)
                 .fixedSize()
                 .padding(.trailing, 4)
@@ -330,8 +329,8 @@ private struct ModelsTable: View {
         HStack(spacing: ModelColumns.gap) {
             col("Model").frame(maxWidth: .infinity, alignment: .leading)
             col("Formats").frame(width: ModelColumns.formats, alignment: .leading)
-            col("mAP50", upper: false).frame(width: ModelColumns.map, alignment: .trailing)
-            col("mAP50-95", upper: false).frame(width: ModelColumns.map95, alignment: .trailing)
+            col("mAP50").frame(width: ModelColumns.map, alignment: .trailing)
+            col("mAP50-95").frame(width: ModelColumns.map95, alignment: .trailing)
             Color.clear.frame(width: ModelColumns.action, height: 1)
         }
         .padding(.horizontal, 18)
@@ -340,8 +339,8 @@ private struct ModelsTable: View {
         .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 1) }
     }
 
-    private func col(_ s: String, upper: Bool = true) -> some View {
-        Text(upper ? s.uppercased() : s).font(.system(size: 10, weight: .semibold)).tracking(0.7).foregroundStyle(Theme.textTertiary).lineLimit(1)
+    private func col(_ s: String) -> some View {
+        Text(s).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textTertiary).lineLimit(1)
     }
 }
 
@@ -403,9 +402,8 @@ private struct FormatTag: View {
     var strong = false
 
     var body: some View {
-        Text(text.uppercased())
-            .font(Theme.mono(9.5, .semibold))
-            .tracking(0.3)
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
             .foregroundStyle(strong ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 5)
             .frame(height: 18)

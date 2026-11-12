@@ -284,7 +284,6 @@ private struct CommandBar: View {
                 .foregroundStyle(stateColor)
             Text("\(count) lines")
                 .foregroundStyle(Theme.textTertiary)
-                .contentTransition(.numericText())
                 .frame(minWidth: 72, alignment: .trailing)
         }
         .font(Theme.mono(10.5))
@@ -328,7 +327,7 @@ private struct ConsoleRow: View {
                 .foregroundStyle(Self.color(for: line))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(Theme.mono(11.5))
+        .font(Theme.code(11.5))
         .padding(.vertical, 1.5)
     }
 

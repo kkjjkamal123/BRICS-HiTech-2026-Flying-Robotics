@@ -1,4 +1,3 @@
-import AVKit
 import SwiftUI
 
 struct SimulationView: View {
@@ -10,7 +9,6 @@ struct SimulationView: View {
                     .frame(width: 400)
             }
             .fixedSize(horizontal: false, vertical: true)
-            SimVideoCard()
             ConsolePanel(height: 260)
         }
     }
@@ -165,132 +163,5 @@ private struct SimScope: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - Replay video
-
-private struct SimVideoCard: View {
-    @Environment(AppModel.self) private var model
-    @State private var player: AVPlayer?
-    @State private var clip = "—"
-    @State private var frame = "—"
-
-    private var url: URL { model.settings.toolkitRoot.appending(path: "runs/sim_videos/aruco_roam_sim.mp4") }
-
-    var body: some View {
-        let exists = FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
-        GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                CardHeader(title: "ArUco roam test · simulation replay", symbol: "film",
-                           trailing: Text("runs/sim_videos/aruco_roam_sim.mp4")
-                            .font(Theme.mono(11)).foregroundStyle(Theme.textTertiary)
-                            .lineLimit(1).truncationMode(.head).eraseToAnyView())
-                if exists {
-                    HStack(alignment: .top, spacing: 20) {
-                        video
-                            .frame(maxWidth: 760)
-                            .layoutPriority(1)
-                        details
-                            .frame(minWidth: 230, maxWidth: .infinity, alignment: .leading)
-                    }
-                } else {
-                    ContentUnavailableView("No replay yet", systemImage: "film",
-                                           description: Text("Render it to runs/sim_videos/aruco_roam_sim.mp4"))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 220)
-                        .background(Theme.well, in: .rect(cornerRadius: Theme.radius))
-                }
-            }
-        }
-        .task(id: url) { await load(exists: exists) }
-        .onDisappear { player?.pause() }
-    }
-
-    private var video: some View {
-        PlayerView(player: player)
-            .aspectRatio(16 / 9, contentMode: .fit)
-            .background(Color.black)
-            .clipShape(.rect(cornerRadius: Theme.radius))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.hairline))
-    }
-
-    private var details: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            fact("Script", "aruco_roam_test.py")
-            fact("Clip", clip)
-            fact("Frame", frame)
-            Rectangle().fill(Theme.hairline).frame(height: 1).padding(.vertical, 12)
-            Eyebrow(text: "Sequence").padding(.bottom, 8)
-            VStack(alignment: .leading, spacing: 7) {
-                step(1, "Lock start on marker map")
-                step(2, "Roam random points in the safe zone")
-                step(3, "Fly back to the start point")
-                step(4, "Slow descent, land, disarm")
-            }
-        }
-    }
-
-    private func fact(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.textSecondary)
-                .frame(width: 52, alignment: .leading)
-            Text(value)
-                .font(Theme.mono(11.5))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .contentTransition(.numericText())
-            Spacer(minLength: 0)
-        }
-        .frame(height: 24)
-    }
-
-    private func step(_ n: Int, _ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("\(n)")
-                .font(Theme.mono(10.5, .semibold))
-                .foregroundStyle(Theme.textTertiary)
-                .frame(width: 14, alignment: .leading)
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
-        }
-    }
-
-    private func load(exists: Bool) async {
-        guard exists else { return }
-        if player == nil { player = AVPlayer(url: url) }
-        let asset = AVURLAsset(url: url)
-        if let d = try? await asset.load(.duration), d.isNumeric {
-            clip = Duration.seconds(d.seconds).formatted(.time(pattern: .minuteSecond))
-        }
-        if let track = try? await asset.loadTracks(withMediaType: .video).first,
-           let size = try? await track.load(.naturalSize) {
-            frame = "\(Int(size.width)) × \(Int(size.height))"
-        }
-    }
-}
-
-/// AppKit `AVPlayerView` host. SwiftUI's `VideoPlayer` aborts at launch on this macOS build
-/// (AVKit_SwiftUI class-metadata fault), so the AppKit view is used directly.
-private struct PlayerView: NSViewRepresentable {
-    let player: AVPlayer?
-
-    func makeNSView(context: Context) -> AVPlayerView {
-        let view = AVPlayerView()
-        view.controlsStyle = .floating
-        view.videoGravity = .resizeAspect
-        view.showsFullScreenToggleButton = true
-        view.player = player
-        return view
-    }
-
-    func updateNSView(_ view: AVPlayerView, context: Context) {
-        if view.player !== player { view.player = player }
     }
 }

@@ -1,9 +1,6 @@
+import AppKit
 import SwiftUI
 
-// MARK: - Design tokens
-//
-// Restrained "instrument" palette: ~90 % neutral, one accent (ember) for fire/detections/primary action,
-// system status colours only for status. Numbers are always SF Mono.
 
 enum Theme {
     // neutrals
@@ -41,7 +38,7 @@ enum Theme {
 
     static func color(forObject name: String) -> Color {
         switch name.lowercased() {
-        case "fire", "hotspot": critical          // heat: thermal camera, >= 100 C
+        case "fire", "hotspot", "tree_fire": critical   // heat: thermal network (tree_fire = heat band around a tree)
         case "flame": accent                      // the flame lamp, seen by the camera model
         case "car", "truck": signal
         case "tree": ok
@@ -49,9 +46,15 @@ enum Theme {
         }
     }
 
+    /// "tree_fire" -> "Tree fire"
+    static func label(forObject name: String) -> String {
+        let s = name.replacingOccurrences(of: "_", with: " ").lowercased()
+        return s.prefix(1).uppercased() + s.dropFirst()
+    }
+
     static func symbol(forObject name: String) -> String {
         switch name.lowercased() {
-        case "fire", "hotspot": "thermometer.high"
+        case "fire", "hotspot", "tree_fire": "thermometer.high"
         case "flame": "flame.fill"
         case "smoke": "smoke.fill"
         case "car", "truck": "car.fill"
@@ -79,8 +82,11 @@ enum Theme {
         }
     }
 
-    static let mono = Font.system(size: 12, weight: .regular, design: .monospaced)
-    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight, design: .monospaced) }
+    static let mono = mono(12)
+    /// Numbers: SF Pro with tabular digits, so values don't jitter while they update.
+    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight).monospacedDigit() }
+    /// Commands, file names and console output.
+    static func code(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight, design: .monospaced) }
 }
 
 extension Color {
@@ -92,7 +98,6 @@ extension Color {
 
 // MARK: - Surfaces
 
-/// Content surface: solid panel + hairline + a faint top highlight. (Glass is reserved for floating controls.)
 /// Battery colour and symbol by level, shared by every place that shows it.
 enum BatteryLevel {
     static func tint(_ percent: Double?) -> Color {
@@ -121,7 +126,6 @@ struct BatteryBadge: View {
                 Text(String(format: "%.0f%%", p))
                     .font(Theme.mono(large ? 13 : 11.5, .semibold))
                     .foregroundStyle(p < 35 ? BatteryLevel.tint(p) : Theme.textPrimary)
-                    .contentTransition(.numericText(value: p))
             }
             .help(b.voltage.map { String(format: "Drone battery: %.1f V (%.2f V per cell)", $0, $0 / 6) } ?? "Drone battery")
             .accessibilityLabel(String(format: "Drone battery %.0f percent", p))
@@ -139,22 +143,16 @@ struct GlassCard<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(Theme.panel, in: .rect(cornerRadius: Theme.radius))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.radius)
-                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.11), .white.opacity(0.045)], startPoint: .top, endPoint: .bottom),
-                                  lineWidth: 1)
-            }
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.hairline))
     }
 }
 
-/// Small uppercase label above a value or a panel.
 struct Eyebrow: View {
     let text: String
     var body: some View {
-        Text(text.uppercased())
-            .font(.system(size: 10.5, weight: .semibold))
-            .tracking(0.8)
-            .foregroundStyle(Theme.textTertiary)
+        Text(text)
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(Theme.textSecondary)
     }
 }
 
@@ -166,12 +164,10 @@ struct CardHeader: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            Eyebrow(text: title)
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
             Spacer(minLength: 8)
             trailing
         }
@@ -191,19 +187,12 @@ struct StatTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(tint == Theme.textPrimary ? Theme.textTertiary : tint)
-                    .symbolRenderingMode(.hierarchical)
-                Eyebrow(text: title)
-            }
+            Eyebrow(text: title)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
-                    .font(Theme.mono(26, .medium))
+                    .font(.system(size: 24, weight: .semibold).monospacedDigit())
                     .foregroundStyle(emphasis ? tint : Theme.textPrimary)
                     .monospacedDigit()
-                    .contentTransition(.numericText())
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
                 if let unit {
@@ -225,7 +214,7 @@ struct StatTile: View {
     }
 }
 
-/// Compact status tag: dot (optionally live) + mono uppercase text.
+
 struct StatusPill: View {
     let text: String
     var color: Color
@@ -239,43 +228,73 @@ struct StatusPill: View {
             } else {
                 LiveDot(color: color, live: pulsing)
             }
-            Text(text.uppercased())
-                .font(Theme.mono(10.5, .semibold))
-                .tracking(0.4)
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
                 .lineLimit(1)
         }
         .foregroundStyle(color)
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(color.opacity(0.10), in: .rect(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(color.opacity(0.22), lineWidth: 0.75))
+        .padding(.vertical, 3)
+        .background(color.opacity(0.12), in: .capsule)
     }
 }
 
-/// A status dot with an expanding ring when live (cheap: one repeating animation, no timeline).
+/// A status dot with an expanding ring while live. The ring runs in Core Animation, so it costs no app CPU.
 struct LiveDot: View {
     let color: Color
     var live = false
     var size: CGFloat = 6
-    @State private var ring = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            if live && !reduceMotion {
-                Circle()
-                    .stroke(color, lineWidth: 1)
-                    .scaleEffect(ring ? 2.6 : 1)
-                    .opacity(ring ? 0 : 0.7)
+        Circle()
+            .fill(color)
+            .frame(width: size, height: size)
+            .background {
+                if live && !reduceMotion { PulseRing(color: NSColor(color)) }
             }
-            Circle().fill(color)
+    }
+}
+
+private struct PulseRing: NSViewRepresentable {
+    let color: NSColor
+
+    func makeNSView(context: Context) -> RingView { RingView() }
+    func updateNSView(_ view: RingView, context: Context) { view.ring.strokeColor = color.cgColor }
+
+    final class RingView: NSView {
+        let ring = CAShapeLayer()
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            ring.fillColor = nil
+            ring.lineWidth = 1
+            layer?.addSublayer(ring)
+            let scale = CABasicAnimation(keyPath: "transform.scale")
+            scale.fromValue = 1
+            scale.toValue = 2.6
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0.7
+            fade.toValue = 0
+            let pulse = CAAnimationGroup()
+            pulse.animations = [scale, fade]
+            pulse.duration = 1.6
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            pulse.repeatCount = .infinity
+            pulse.isRemovedOnCompletion = false
+            ring.add(pulse, forKey: "pulse")
         }
-        .frame(width: size, height: size)
-        .onAppear { if live { withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { ring = true } } }
-        .onChange(of: live) { _, on in
-            ring = false
-            if on { withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { ring = true } }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func layout() {
+            super.layout()
+            ring.frame = bounds
+            ring.path = CGPath(ellipseIn: bounds.insetBy(dx: 0.5, dy: 0.5), transform: nil)
         }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
 
@@ -287,15 +306,9 @@ struct PageHeader: View {
 
     var body: some View {
         HStack(alignment: .lastTextBaseline, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(section.title)
-                    .font(.system(size: 26, weight: .semibold))
-                    .tracking(-0.4)
-                    .foregroundStyle(Theme.textPrimary)
-                Text(section.subtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.textSecondary)
-            }
+            Text(section.title)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(Theme.textPrimary)
             Spacer()
             trailing
         }

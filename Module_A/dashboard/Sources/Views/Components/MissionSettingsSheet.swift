@@ -119,6 +119,17 @@ private struct SettingsForm: View {
     var body: some View {
         @Bindable var ms = model.missionSettings
         VStack(alignment: .leading, spacing: 18) {
+            FormSection(title: "Flight", symbol: "airplane.departure", tint: Theme.accent) {
+                Picker("Flight", selection: $ms.kind) {
+                    ForEach(MissionSettings.Kind.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                Explain(ms.kind == .flameRTH
+                    ? "Takes off straight up to the cruise height (2.7 m, above the 1.5 m trees), flies exactly 3 lawn-mower lines at that height, and at the first confirmed flame saves screenshots and flies back to the take-off point at the same height, then lands straight down. The height only changes during the climb and the descent; it never goes down to a detection. No flame: it finishes the 3 lines and returns the same way."
+                    : "The full Case 1 mission: survey at the chosen height with line spacing from the camera view, maps every source, photographs it, returns home and lands.")
+            }
+
             FormSection(title: "Arena", symbol: "square.grid.3x3") {
                 InfoLine(text: String(format: "Floor markers  x %.2f … %.2f   y %.2f … %.2f m", markerField[0], markerField[2], markerField[1], markerField[3]))
                 Explain("The drone only knows where it is above the markers, so the boundary cannot be set past the outer markers, the scan area cannot leave the boundary, and home stays inside it. Out-of-range values are pulled back as you type. Origin (0, 0) = centre of the field.")
@@ -154,11 +165,17 @@ private struct SettingsForm: View {
             }
 
             FormSection(title: "Flight", symbol: "airplane") {
-                ParamSlider(label: "Altitude", value: $ms.altitude, range: MissionSettings.Limit.altitude, step: 0.1, format: "%.1f", unit: "m")
+                ParamSlider(label: "Altitude", value: $ms.altitude, range: ms.kind.minAltitude...MissionSettings.Limit.altitude.upperBound, step: 0.1, format: "%.1f", unit: "m")
                 ParamSlider(label: "Speed", value: $ms.speed, range: MissionSettings.Limit.speed, step: 0.05, format: "%.2f", unit: "")
                 Explain("Altitude = survey height. Higher sees a wider strip (fewer lines) but makes objects smaller. Speed in m/s: slower gives sharper pictures and more detections.")
             }
 
+            if ms.kind == .flameRTH {
+                FormSection(title: "Lines", symbol: "line.3.horizontal") {
+                    InfoLine(text: String(format: "3 lines at y %.2f, %.2f, %.2f m  (%.2f m apart)", ms.area[1], (ms.area[1] + ms.area[3]) / 2, ms.area[3], ms.actualSpacing))
+                    Explain("Fixed for this flight: the edges and the middle of the scan area. Change the scan area to move them.")
+                }
+            } else {
             FormSection(title: "Line spacing", symbol: "line.3.horizontal") {
                 Picker("Line spacing", selection: $ms.spacingAuto) {
                     Text("Auto (from camera view)").tag(true)
@@ -176,10 +193,11 @@ private struct SettingsForm: View {
                 Explain(String(format: "Line spacing is the distance between two neighbouring passes of the lawn-mower sweep (the blue lines on the map). At %.1f m the thermal camera sees a strip %.2f m wide, so spacing below that means the strips overlap and nothing is missed. Smaller spacing = more lines, longer flight. Larger = faster, but gaps if it is wider than the strip.",
                                ms.altitude, min(ms.footprint.width, ms.footprint.height)))
             }
+            }
 
             FormSection(title: "Fire temperature", symbol: "thermometer.high", tint: Theme.accent) {
                 ParamSlider(label: "Fire at ≥", value: $ms.fireC, range: MissionSettings.Limit.fireC, step: 5, format: "%.0f", unit: "°C")
-                Explain("Anything the thermal camera reads at or above this temperature is mapped as fire. Venue rule: 100 °C. The thermal pane draws its FIRE boxes at the same temperature while the mission runs.")
+                Explain("Fire is found by the thermal neural network; this temperature only CONFIRMS its boxes: a fire box counts when its hottest pixel reaches it, so warm people and laptops are rejected. From flight height the real heat source reads 52–88 °C (it is smaller than one camera pixel's footprint), so 60 °C, not 100 °C. The thermal pane draws its FIRE boxes at the same temperature while the mission runs.")
             }
         }
     }
@@ -198,9 +216,8 @@ private struct FormSection<Content: View>: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 14)
-                Text(title.uppercased())
-                    .font(Theme.mono(10.5, .semibold))
-                    .tracking(0.8)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.textSecondary)
             }
             content
@@ -306,20 +323,19 @@ private struct SurveyFacts: View {
         let ms = settings
         let lines = ms.surveyLines
         HStack(spacing: 18) {
-            fact("LINES", "\(lines.count)")
-            fact("SPACING", String(format: "%.2f m", ms.actualSpacing))
-            fact("CAMERA STRIP", String(format: "%.2f m", min(ms.footprint.width, ms.footprint.height)))
-            fact("PATH", String(format: "%.1f m", ms.surveyLength))
-            fact("SURVEY TIME", String(format: "%d:%02d", Int(ms.surveySeconds) / 60, Int(ms.surveySeconds) % 60))
+            fact("Lines", "\(lines.count)")
+            fact("Spacing", String(format: "%.2f m", ms.actualSpacing))
+            fact("Camera strip", String(format: "%.2f m", min(ms.footprint.width, ms.footprint.height)))
+            fact("Path", String(format: "%.1f m", ms.surveyLength))
+            fact("Survey time", String(format: "%d:%02d", Int(ms.surveySeconds) / 60, Int(ms.surveySeconds) % 60))
             Spacer(minLength: 0)
         }
     }
 
     private func fact(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(Theme.mono(9.5, .semibold)).tracking(0.6).foregroundStyle(Theme.textTertiary)
+            Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textTertiary)
             Text(value).font(Theme.mono(14, .medium)).foregroundStyle(Theme.textPrimary).monospacedDigit()
-                .contentTransition(.numericText())
         }
     }
 }
@@ -441,7 +457,7 @@ private struct SurveyPreview: View {
         guard b[0] < b[2], b[1] < b[3] else { return }
         let r = rect(f, b)
         ctx.stroke(Path(r), with: .color(color), style: StrokeStyle(lineWidth: width, dash: [5, 4]))
-        let text = Text(label).font(Theme.mono(9, .semibold)).tracking(0.5).foregroundStyle(color)
+        let text = Text(label).font(.system(size: 10, weight: .medium)).foregroundStyle(color)
         if below {
             ctx.draw(text, at: CGPoint(x: r.maxX, y: r.maxY + 3), anchor: .topTrailing)
         } else {

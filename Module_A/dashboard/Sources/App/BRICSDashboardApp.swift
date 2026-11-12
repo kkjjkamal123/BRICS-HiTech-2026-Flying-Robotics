@@ -8,6 +8,7 @@ struct BRICSDashboardApp: App {
         WindowGroup("BRICS Dashboard", id: "main") {
             RootView()
                 .environment(model)
+                .focusEffectDisabled()
                 .frame(minWidth: 1180, minHeight: 760)
                 .task { model.start() }
         }
@@ -18,9 +19,9 @@ struct BRICSDashboardApp: App {
             CommandMenu("Drone") {
                 Button("Start Mission") { model.mission.send(.start) }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
-                Button("Return Home") { model.mission.send(.returnHome) }
+                Button("Return Home") { model.command(.returnHome) }
                     .keyboardShortcut("h", modifiers: [.command, .shift])
-                Button("Land Now") { model.mission.send(.land) }
+                Button("Land Now") { model.command(.land) }
                     .keyboardShortcut("l", modifiers: [.command, .shift])
                 Divider()
                 Button("Run Simulation") { model.startSimulation() }

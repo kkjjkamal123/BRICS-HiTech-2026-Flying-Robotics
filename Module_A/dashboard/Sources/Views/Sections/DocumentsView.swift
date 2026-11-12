@@ -232,8 +232,7 @@ private struct KindTag: View {
 
     var body: some View {
         Text(kind)
-            .font(Theme.mono(9.5, .semibold))
-            .tracking(0.4)
+            .font(.system(size: 10, weight: .medium))
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)

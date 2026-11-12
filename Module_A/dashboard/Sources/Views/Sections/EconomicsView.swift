@@ -11,7 +11,19 @@ struct EconomicsView: View {
     var body: some View {
         let e = model.economics
         Page(section: .economics) {
-            if !e.loaded {
+            if !e.loaded && e.attempted {
+                GlassCard {
+                    ContentUnavailableView {
+                        Label("Economics model not found", systemImage: "chart.pie")
+                    } description: {
+                        Text("Needs economics/case1_fire.yaml and the toolkit .venv with PyYAML.")
+                    } actions: {
+                        Button("Try again", systemImage: "arrow.clockwise") { e.reload() }
+                            .fixedSize()
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 220)
+                }
+            } else if !e.loaded {
                 GlassCard {
                     ProgressView("Loading economics model…")
                         .controlSize(.small)
@@ -234,7 +246,6 @@ private struct ReadoutCell: View {
                 Text(readout.value)
                     .font(Theme.mono(24, .medium))
                     .foregroundStyle(Theme.textPrimary)
-                    .contentTransition(.numericText())
                 Text(readout.unit)
                     .font(Theme.mono(12, .medium))
                     .foregroundStyle(Theme.textSecondary)
@@ -313,7 +324,7 @@ private struct CashFlowChart: View {
                 .foregroundStyle(Theme.hairlineStrong)
                 .lineStyle(StrokeStyle(lineWidth: 1))
                 .annotation(position: .top, alignment: .leading, spacing: 3) {
-                    Text("BREAK-EVEN").font(Theme.mono(9, .semibold)).tracking(0.5).foregroundStyle(Theme.textTertiary)
+                    Text("Break-even").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.textTertiary)
                 }
             cumulative
             paybackRule
@@ -390,8 +401,8 @@ private struct CashFlowChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 .annotation(position: .top, alignment: .leading, spacing: 2,
                             overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                    Text("PAYBACK \(Fmt.fixed(payback, 2)) YR")
-                        .font(Theme.mono(9, .semibold)).tracking(0.5)
+                    Text("Payback \(Fmt.fixed(payback, 2)) yr")
+                        .font(Theme.mono(10, .medium))
                         .foregroundStyle(Theme.textSecondary)
                         .padding(.leading, 4)
                 }
@@ -475,11 +486,11 @@ private struct BenefitsCard: View {
     private var legend: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Text("ITEM").frame(maxWidth: .infinity, alignment: .leading)
+                Text("Item").frame(maxWidth: .infinity, alignment: .leading)
                 Text("M ₽").frame(width: 52, alignment: .trailing)
-                Text("SHARE").frame(width: 50, alignment: .trailing)
+                Text("Share").frame(width: 50, alignment: .trailing)
             }
-            .font(.system(size: 10, weight: .semibold)).tracking(0.6)
+            .font(.system(size: 11, weight: .medium))
             .foregroundStyle(Theme.textTertiary)
             .padding(.bottom, 6)
             ForEach(benefits.sorted { $0.amount > $1.amount }) { b in

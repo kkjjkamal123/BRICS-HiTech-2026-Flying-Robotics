@@ -80,16 +80,43 @@ struct DroneLink {
     /// ground is stopped first (never one that is flying), then the new one starts with `settings`
     /// (`--set KEY=VALUE` from the Mission settings sheet). Each argument is single-quoted for the remote shell.
     @discardableResult
-    func launchMission(settings extra: [String] = []) -> ProcessJob {
+    func launchMission(settings extra: [String] = [], title: String = "Case 1 mission (drone)") -> ProcessJob {
         let quoted = extra.map { "'\($0.replacingOccurrences(of: "'", with: ""))'" }.joined(separator: " ")
-        let job = run("Case 1 mission (drone)", remote: "\(Self.rosEnv); cd ~/brics_toolkit && if [ ! -f tools/run_mission.sh ] || [ ! -f common/mission_settings.py ]; then echo 'OLD MISSION CODE ON THE DRONE - in the dashboard open Flight Tests, click the Drone menu (top right), choose Deploy full toolkit, wait for it to finish, then Run mission again. Nothing was flown.'; exit 3; fi; echo $$ > /tmp/brics_job.pid; exec bash tools/run_mission.sh \(quoted)")
+        let job = run(title, remote: "\(Self.rosEnv); cd ~/brics_toolkit && if [ ! -f tools/run_mission.sh ] || [ ! -f common/mission_settings.py ]; then echo 'OLD MISSION CODE ON THE DRONE - in the dashboard open Flight Tests, click the Drone menu (top right), choose Deploy full toolkit, wait for it to finish, then Run mission again. Nothing was flown.'; exit 3; fi; echo $$ > /tmp/brics_job.pid; exec bash tools/run_mission.sh \(quoted)")
         attachRemoteStop(job)
         return job
+    }
+
+    /// Reboots EVERYTHING: the flight controller (MAVLink MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN through mavros), then the
+    /// Orange Pi. The drone refuses while the motors are armed. Back in ~1-2 min; the dashboard finds it again itself.
+    @discardableResult
+    func rebootDrone() -> ProcessJob {
+        let pw = settings.sshPassword.replacingOccurrences(of: "'", with: "")
+        let remote = """
+        \(Self.rosEnv) 2>/dev/null
+        armed=$(timeout 6 rostopic echo -n 1 /mavros/state/armed 2>/dev/null | head -1)
+        if [ "$armed" = "True" ]; then echo "[reboot] REFUSED: the drone is ARMED - land and disarm first. Nothing was rebooted."; exit 3; fi
+        echo "[reboot] motors disarmed - rebooting the flight controller"
+        if timeout 8 rosservice call /mavros/cmd/command "{broadcast: false, command: 246, confirmation: 0, param1: 1.0, param2: 0.0, param3: 0.0, param4: 0.0, param5: 0.0, param6: 0.0, param7: 0.0}" 2>&1 | grep -q "success: True"; then
+          echo "[reboot] flight controller is rebooting"
+        else
+          echo "[reboot] flight controller did not confirm (not connected?) - it restarts with the next battery plug-in"
+        fi
+        sync
+        echo '\(pw)' | sudo -S -p '' sh -c '(sleep 3; systemctl reboot) >/dev/null 2>&1 &' && echo "[reboot] Orange Pi reboots in 3 s - the drone is back in about 1-2 minutes" || { echo "[reboot] could not reboot the Orange Pi (sudo refused)"; exit 4; }
+        """
+        return run("Reboot drone (FC + Pi)", remote: remote)
     }
 
     /// Emergency: ask the TECHNIC software to land right now (independent of any script).
     func landNow() {
         run("LAND NOW", remote: "\(Self.rosEnv); rosservice call /land '{}'")
+    }
+
+    /// RETURN for the mission script, sent on the drone itself (tools/mission_cmd.py): the same command the mission
+    /// link sends, for when the dashboard has no HTTP link to the mission. The mission flies home, then lands.
+    func returnHomeNow() {
+        run("RETURN HOME", remote: "cd ~/brics_toolkit && python3 tools/mission_cmd.py return --port \(settings.missionPort)")
     }
 
     /// Copies the flight scripts to ~/ on the drone (where the run buttons expect them).

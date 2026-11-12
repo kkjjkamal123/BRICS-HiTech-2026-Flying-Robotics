@@ -24,16 +24,21 @@ struct FieldMap: View {
     var track: [SIMD2<Double>] = []
     var objects: [MapObject] = []
     var showLabels = true
+    /// The real arena floor (marker map). Drawn as the printed sheet with every ArUco marker, so detections sit on
+    /// the floor as it is; labels and tooltips name the nearest marker.
+    var arena: ArenaMap?
 
     @State private var hovered: String?
 
     var body: some View {
         GeometryReader { geo in
             let frame = WorldFrame(bounds: bounds, size: geo.size, insets: Self.insets)
-            let layout = LabelLayout(objects: showLabels ? objects : [], frame: frame, area: area, home: home)
+            let layout = LabelLayout(objects: showLabels ? objects : [], frame: frame, area: area, home: home, arena: arena)
             ZStack(alignment: .topLeading) {
-                MapCanvas(area: area, home: home, markers: markers, track: track, fadeTrail: drone != nil, frame: frame)
-                CursorReadout(frame: frame)
+                MapCanvas(layer: .floor, area: area, home: home, markers: markers, track: [], fadeTrail: false, frame: frame, arena: arena)
+                    .equatable()
+                MapCanvas(layer: .track, area: nil, home: home, track: track, fadeTrail: drone != nil, frame: frame, arena: arena)
+                CursorReadout(frame: frame, arena: arena)
                 ForEach(layout.placements) { p in
                     PinLabel(placement: p, highlighted: hovered == p.id)
                         .zIndex(hovered == p.id ? 2 : 1)
@@ -49,7 +54,7 @@ struct FieldMap: View {
                         .zIndex(3)
                 }
                 if let drone {
-                    DroneGlyph(heading: heading ?? Self.heading(from: track))
+                    DroneGlyph(heading: heading ?? Self.heading(from: track), onFloor: arena != nil)
                         .position(frame.point(drone.x, drone.y))
                         .animation(.smooth(duration: 0.45), value: drone)
                         .zIndex(4)
@@ -67,6 +72,7 @@ struct FieldMap: View {
 
     private func pinHelp(_ o: MapObject) -> String {
         var s = String(format: "%@  x %.2f  y %.2f m", o.label, o.x, o.y)
+        if let near = arena?.describe(o.x, o.y) { s += "  ·  " + near }
         if let t = o.time { s += "  ·  \(t)" }
         return s
     }
@@ -74,14 +80,16 @@ struct FieldMap: View {
     /// Everything that should be visible, with a 0.6 m margin.
     private var bounds: CGRect {
         var xs: [Double] = [0, 1], ys: [Double] = [0, 1]
+        if let s = arena?.sheet { xs += [s[0], s[2]]; ys += [s[1], s[3]] }
         if let a = area, a.count == 4 { xs += [a[0], a[2]]; ys += [a[1], a[3]] }
         if let h = home, h.count >= 2 { xs.append(h[0]); ys.append(h[1]) }
         for m in markers where m.count >= 2 { xs.append(m[0]); ys.append(m[1]) }
         if let d = drone { xs.append(d.x); ys.append(d.y) }
         for p in track { xs.append(p.x); ys.append(p.y) }
         for o in objects { xs.append(o.x); ys.append(o.y) }
-        let x0 = (xs.min() ?? 0) - 0.6, x1 = (xs.max() ?? 1) + 0.6
-        let y0 = (ys.min() ?? 0) - 0.6, y1 = (ys.max() ?? 1) + 0.6
+        let m = arena == nil ? 0.6 : 0.12                  // the floor sheet already has its own margin
+        let x0 = (xs.min() ?? 0) - m, x1 = (xs.max() ?? 1) + m
+        let y0 = (ys.min() ?? 0) - m, y1 = (ys.max() ?? 1) + m
         return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 
@@ -130,22 +138,87 @@ struct WorldFrame: Equatable {
 
 // MARK: - Static layers
 
+/// Two instances: the floor (redrawn only when the frame or arena changes) and the trail + home pad on top.
 private struct MapCanvas: View, Equatable {
+    enum Layer { case floor, track }
+    let layer: Layer
     let area: [Double]?
     let home: [Double]?
     var markers: [[Double]] = []
     let track: [SIMD2<Double>]
     let fadeTrail: Bool
     let frame: WorldFrame
+    var arena: ArenaMap?
+
+    /// Printed floor sheet and marker ink (slightly dimmed so the light floor does not glare in the dark UI).
+    static let floor = Color(hex: 0xD8D5CE)
+    static let ink = Color(hex: 0x16181B)
+    static let trackOnFloor = Color(hex: 0x1F5FBF)
+    private var onFloor: Bool { arena != nil }
 
     var body: some View {
         Canvas { ctx, _ in
-            drawGrid(ctx)
-            drawMarkers(ctx)
-            drawArea(ctx)
-            drawTrack(ctx)
-            drawHome(ctx)
+            switch layer {
+            case .floor:
+                drawGrid(ctx)
+                if let arena { drawFloor(ctx, arena) } else { drawMarkers(ctx) }
+                drawArea(ctx)
+            case .track:
+                drawTrack(ctx)
+                drawHome(ctx)
+            }
         }
+    }
+
+    /// The real floor: the printed sheet, every ArUco marker with its true pattern / size / position, metre lines and
+    /// the marker IDs (when big enough to read).
+    private func drawFloor(_ ctx: GraphicsContext, _ arena: ArenaMap) {
+        let f = frame, k = f.pointsPerMetre, s = arena.sheet
+        let a = f.point(s[0], s[3]), b = f.point(s[2], s[1])
+        let sheet = CGRect(x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y)
+        ctx.fill(Path(roundedRect: sheet, cornerRadius: 3), with: .color(Self.floor))
+        // metre lines and the axes through the origin, faint, under the markers
+        var lines = Path(), axes = Path()
+        var x = s[0].rounded(.up)
+        while x <= s[2] + 1e-9 {
+            let px = f.point(x, 0).x
+            if abs(x) < 1e-9 { axes.addLines([CGPoint(x: px, y: sheet.minY), CGPoint(x: px, y: sheet.maxY)]) }
+            else { lines.addLines([CGPoint(x: px, y: sheet.minY), CGPoint(x: px, y: sheet.maxY)]) }
+            x += 1
+        }
+        var y = s[1].rounded(.up)
+        while y <= s[3] + 1e-9 {
+            let py = f.point(0, y).y
+            if abs(y) < 1e-9 { axes.move(to: CGPoint(x: sheet.minX, y: py)); axes.addLine(to: CGPoint(x: sheet.maxX, y: py)) }
+            else { lines.move(to: CGPoint(x: sheet.minX, y: py)); lines.addLine(to: CGPoint(x: sheet.maxX, y: py)) }
+            y += 1
+        }
+        ctx.stroke(lines, with: .color(.black.opacity(0.07)), lineWidth: 0.75)
+        ctx.stroke(axes, with: .color(.black.opacity(0.16)), style: StrokeStyle(lineWidth: 0.75, dash: [3, 3]))
+        // markers: black square, then the white cells of its 4 x 4 code (row 0 = top edge, facing +y at yaw 0)
+        var ink = Path(), paper = Path()
+        for m in arena.markers {
+            let c = f.point(m.x, m.y), side = m.size * k, cell = side / 6
+            let t = CGAffineTransform(translationX: c.x, y: c.y).rotated(by: -m.yaw)     // view y points down
+            ink.addRect(CGRect(x: -side / 2, y: -side / 2, width: side, height: side), transform: t)
+            guard cell >= 0.8 else { continue }                                         // too small: plain square
+            for r in 0..<4 {
+                for col in 0..<4 where ArucoDictionary.isWhite(m.id, row: r, col: col) {
+                    paper.addRect(CGRect(x: -side / 2 + CGFloat(col + 1) * cell, y: -side / 2 + CGFloat(r + 1) * cell,
+                                         width: cell, height: cell), transform: t)
+                }
+            }
+        }
+        ctx.fill(ink, with: .color(Self.ink))
+        ctx.fill(paper, with: .color(Self.floor))
+        if k * 0.25 >= 15 {                                 // marker IDs once a marker is ~15 pt wide
+            for m in arena.markers {
+                let p = f.point(m.x, m.y - m.size / 2)
+                ctx.draw(Text("\(m.id)").font(Theme.code(max(7, min(10, k * 0.07)), .medium)).foregroundStyle(Color.black.opacity(0.45)),
+                         at: CGPoint(x: p.x, y: p.y + 1.5), anchor: .top)
+            }
+        }
+        ctx.stroke(Path(roundedRect: sheet, cornerRadius: 3), with: .color(.white.opacity(0.18)), lineWidth: 0.75)
     }
 
     private func drawGrid(_ ctx: GraphicsContext) {
@@ -207,16 +280,16 @@ private struct MapCanvas: View, Equatable {
     }
 
     private func axisText(_ s: String) -> Text {
-        Text(s).font(Theme.mono(9)).foregroundStyle(Theme.textTertiary)
+        Text(s).font(Theme.code(9)).foregroundStyle(Theme.textTertiary)
     }
 
     private func drawArea(_ ctx: GraphicsContext) {
         guard let rect = LabelLayout.areaRect(area, frame) else { return }
-        ctx.fill(Path(rect), with: .color(.white.opacity(0.018)))
-        ctx.stroke(Path(rect), with: .color(.white.opacity(0.34)), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        ctx.fill(Path(rect), with: .color(onFloor ? .black.opacity(0.035) : .white.opacity(0.018)))
+        ctx.stroke(Path(rect), with: .color(onFloor ? .black.opacity(0.55) : .white.opacity(0.34)), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
         if let a = area, let lr = LabelLayout.areaLabelRect(area, frame) {
-            let text = String(format: "SURVEY %.1f × %.1f m", abs(a[2] - a[0]), abs(a[3] - a[1]))
-            ctx.draw(Text(text).font(Theme.mono(8.5, .medium)).tracking(0.4).foregroundStyle(Theme.textTertiary),
+            let text = String(format: "Survey %.1f × %.1f m", abs(a[2] - a[0]), abs(a[3] - a[1]))
+            ctx.draw(Text(text).font(Theme.code(8.5, .medium)).foregroundStyle(onFloor ? Color.black.opacity(0.6) : Theme.textTertiary),
                      at: CGPoint(x: lr.minX, y: lr.midY), anchor: .leading)
         }
     }
@@ -228,7 +301,7 @@ private struct MapCanvas: View, Equatable {
         guard fadeTrail else {
             var path = Path()
             path.addLines(pts)
-            ctx.stroke(path, with: .color(Theme.signal.opacity(0.75)), style: style)
+            ctx.stroke(path, with: .color((onFloor ? Self.trackOnFloor : Theme.signal).opacity(0.75)), style: style)
             return
         }
         // fading breadcrumb: older segments fade towards the background (drawn in a few chunks, not per point)
@@ -241,7 +314,7 @@ private struct MapCanvas: View, Equatable {
             var path = Path()
             path.addLines(Array(pts[a...b]))
             let t = Double(i + 1) / Double(chunks)
-            ctx.stroke(path, with: .color(Theme.signal.opacity(0.08 + 0.82 * t * t)), style: style)
+            ctx.stroke(path, with: .color((onFloor ? Self.trackOnFloor : Theme.signal).opacity(0.08 + 0.82 * t * t)), style: style)
         }
     }
 
@@ -250,7 +323,7 @@ private struct MapCanvas: View, Equatable {
         let shape = Path(roundedRect: r, cornerRadius: 3)
         ctx.fill(shape, with: .color(Theme.canvas))
         ctx.stroke(shape, with: .color(Theme.textSecondary), lineWidth: 1)
-        ctx.draw(Text("H").font(Theme.mono(9.5, .bold)).foregroundStyle(Theme.textPrimary),
+        ctx.draw(Text("H").font(Theme.code(9.5, .bold)).foregroundStyle(Theme.textPrimary),
                  at: CGPoint(x: r.midX, y: r.midY))
     }
 }
@@ -275,7 +348,7 @@ private struct LabelLayout {
     static let charWidth: CGFloat = 0.62   // SF Mono advance ≈ 0.6 em
     static let pinRadius: CGFloat = 12
 
-    init(objects: [MapObject], frame: WorldFrame, area: [Double]?, home: [Double]?) {
+    init(objects: [MapObject], frame: WorldFrame, area: [Double]?, home: [Double]?, arena: ArenaMap? = nil) {
         guard !objects.isEmpty else { return }
         let canvas = CGRect(origin: .zero, size: frame.size).insetBy(dx: 2, dy: 2)
         var obstacles: [CGRect] = objects.map {
@@ -286,8 +359,9 @@ private struct LabelLayout {
         if let s = Self.areaLabelRect(area, frame) { obstacles.append(s) }
 
         for o in objects.sorted(by: { $0.id.localizedStandardCompare($1.id) == .orderedAscending }) {
-            let title = o.label.uppercased()
-            let detail = String(format: "%.2f, %.2f", o.x, o.y)
+            let title = o.label
+            var detail = String(format: "%.2f, %.2f", o.x, o.y)
+            if let n = arena?.nearest(o.x, o.y) { detail += " · M\(n.marker.id)" }      // nearest floor marker
             let w = CGFloat(max(title.count, detail.count)) * Self.titleSize * Self.charWidth + 12
             let h: CGFloat = 30
             let p = frame.point(o.x, o.y)
@@ -359,10 +433,10 @@ private struct PinLabel: View {
                 .stroke(Theme.accent.opacity(highlighted ? 0.8 : 0.4), lineWidth: 0.75)
             VStack(alignment: .leading, spacing: 1) {
                 Text(placement.title)
-                    .font(Theme.mono(LabelLayout.titleSize, .semibold))
+                    .font(Theme.code(LabelLayout.titleSize, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Text(placement.detail)
-                    .font(Theme.mono(LabelLayout.detailSize))
+                    .font(Theme.code(LabelLayout.detailSize))
                     .foregroundStyle(Theme.textSecondary)
             }
             .lineLimit(1)
@@ -435,25 +509,28 @@ private struct ObjectPin: View {
 
 private struct DroneGlyph: View {
     var heading: Double?
+    /// Drawn on the light floor: dark arrow, deeper blue ring.
+    var onFloor = false
     /// Unwrapped rotation so 359° → 1° turns 2°, not -358°.
     @State private var angle: Double = 0
 
     var body: some View {
         ZStack {
+            let ring = onFloor ? MapCanvas.trackOnFloor : Theme.signal
             Circle()
-                .fill(Theme.signal.opacity(0.14))
+                .fill(ring.opacity(onFloor ? 0.18 : 0.14))
                 .frame(width: 30, height: 30)
             Circle()
-                .strokeBorder(Theme.signal.opacity(0.45), lineWidth: 0.75)
+                .strokeBorder(ring.opacity(onFloor ? 0.8 : 0.45), lineWidth: onFloor ? 1 : 0.75)
                 .frame(width: 30, height: 30)
             if heading != nil {
                 Arrowhead()
-                    .fill(Theme.textPrimary)
-                    .overlay(Arrowhead().stroke(Theme.canvas, lineWidth: 1))
+                    .fill(onFloor ? MapCanvas.ink : Theme.textPrimary)
+                    .overlay(Arrowhead().stroke(onFloor ? Color.white : Theme.canvas, lineWidth: 1))
                     .frame(width: 13, height: 15)
                     .rotationEffect(.radians(angle))
             } else {
-                Circle().fill(Theme.textPrimary).frame(width: 9, height: 9)
+                Circle().fill(onFloor ? MapCanvas.ink : Theme.textPrimary).frame(width: 9, height: 9)
             }
         }
         .onAppear { angle = target(heading) }
@@ -487,6 +564,7 @@ private struct Arrowhead: Shape {
 /// nothing else.
 private struct CursorReadout: View {
     let frame: WorldFrame
+    var arena: ArenaMap?
     @State private var cursor: CGPoint?
 
     var body: some View {
@@ -501,8 +579,9 @@ private struct CursorReadout: View {
             .overlay(alignment: .topTrailing) {
                 if let cursor {
                     let w = frame.world(cursor)
-                    Text(String(format: "x %5.2f  y %5.2f m", w.x, w.y))
-                        .font(Theme.mono(10, .medium))
+                    Text(String(format: "x %5.2f  y %5.2f m", w.x, w.y)
+                         + (arena?.nearest(w.x, w.y).map { "  ·  M\($0.marker.id)" } ?? ""))
+                        .font(Theme.code(10, .medium))
                         .foregroundStyle(Theme.textSecondary)
                         .monospacedDigit()
                         .padding(.horizontal, 7)
@@ -517,7 +596,7 @@ private struct CursorReadout: View {
             .overlay {
                 if let cursor {
                     CrossHair(point: cursor, rect: frame.worldRect)
-                        .stroke(Color.white.opacity(0.14), style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                        .stroke(arena == nil ? Color.white.opacity(0.14) : Color.black.opacity(0.3), style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
                         .allowsHitTesting(false)
                 }
             }

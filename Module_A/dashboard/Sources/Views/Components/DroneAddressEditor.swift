@@ -48,6 +48,38 @@ struct DroneAddressEditor: View {
                 }
             }
 
+            HStack(spacing: 8) {
+                Button {
+                    Task { await search() }
+                } label: {
+                    Label("Find drone on this Wi-Fi", systemImage: "dot.radiowaves.left.and.right")
+                }
+                .buttonStyle(.quiet)
+                .disabled(model.droneSearching)
+                if let p = model.droneSearchProgress {
+                    ProgressView().controlSize(.mini)
+                    Text(p.total > 0 ? "checked \(p.done) of \(p.total)" : "starting")
+                        .font(Theme.mono(11)).foregroundStyle(Theme.textTertiary)
+                }
+            }
+            if let found = model.droneSearchResult, !model.droneSearching {
+                if found.isEmpty {
+                    Text("No drone found on this Wi-Fi. Is the drone switched on and on the same network as this Mac? A VPN can hide local addresses; switch it off. Or use the drone's own hotspot (10.42.0.1).")
+                        .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    HStack(spacing: 6) {
+                        Text(found.count == 1 ? "Drone found at" : "Drones found:")
+                            .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                        ForEach(found, id: \.self) { host in
+                            Button(host) { draft = host; connect() }
+                                .buttonStyle(.quiet)
+                                .font(Theme.mono(11))
+                        }
+                    }
+                }
+            }
+
             if !checks.isEmpty {
                 Divider().overlay(Theme.hairline)
                 VStack(alignment: .leading, spacing: 7) {
@@ -126,6 +158,18 @@ struct DroneAddressEditor: View {
                 }
             }
             checking = false
+            // nothing at this address: the drone probably got a new one from the Wi-Fi -> look for it
+            if checks.allSatisfy({ $0.open == false }) { await search() }
+        }
+    }
+
+    /// findDrone switches the app to the drone when the saved address is not one it found; then re-run the checks there.
+    private func search() async {
+        let before = model.settings.droneHost
+        await model.findDrone()
+        if model.settings.droneHost != before {
+            draft = model.settings.droneHost
+            connect()
         }
     }
 }

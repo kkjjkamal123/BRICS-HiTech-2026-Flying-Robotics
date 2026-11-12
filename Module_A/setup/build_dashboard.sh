@@ -5,9 +5,11 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/dashboard"
 xcodegen generate >/dev/null
-xcodebuild -project BRICSDashboard.xcodeproj -scheme BRICSDashboard -configuration Debug -derivedDataPath build/dd build 2>&1 | grep -E "error:|BUILD"
-BUILT="build/dd/Build/Products/Debug/BRICS Dashboard.app"
-[ -d "$BUILT" ] || { echo "build failed"; exit 1; }
+rm -rf "build/dd/Build/Products/Release/BRICS Dashboard.app"       # never install a stale product
+xcodebuild -project BRICSDashboard.xcodeproj -scheme BRICSDashboard -configuration Release -derivedDataPath build/dd build 2>&1 | grep -E "error:|BUILD" || true
+BUILT="build/dd/Build/Products/Release/BRICS Dashboard.app"
+# only a COMPLETE app replaces the installed one: a failed build can leave a folder without the program in it
+[ -x "$BUILT/Contents/MacOS/BRICS Dashboard" ] || { echo "BUILD FAILED - the installed app was NOT touched"; exit 1; }
 pkill -f "MacOS/BRICS Dashboard" 2>/dev/null || true
 rm -rf "$ROOT/BRICS Dashboard.app"
 ditto "$BUILT" "$ROOT/BRICS Dashboard.app"

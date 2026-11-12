@@ -37,7 +37,7 @@ struct MissionDetection: Decodable, Identifiable, Hashable, Sendable {
 
     /// "#1 FIRE 143°C" / "#2 FLAME" - what the map and the table show.
     var mapLabel: String {
-        var s = "#\(id ?? 0) \(name.uppercased())"
+        var s = "#\(id ?? 0) \(Theme.label(forObject: name))"
         if let temp { s += String(format: " %.0f°C", temp) }
         return s
     }
@@ -132,9 +132,31 @@ final class MissionClient {
         }
     }
     /// JPEG quality of the main camera stream from the drone (lower = less Wi-Fi, more lag-proof).
-    var streamQuality: Int = UserDefaults.standard.object(forKey: "streamQuality") as? Int ?? 50 {
-        didSet { UserDefaults.standard.set(streamQuality, forKey: "streamQuality") }
+    /// How much video the dashboard pulls over the drone's Wi-Fi. At the venue (11 Nov) full-rate video (3.7 Mbit/s)
+    /// pushed the drone's replies to 1.3 s and the link kept dropping; Data saver needs about 5x less.
+    enum VideoMode: String, CaseIterable, Identifiable {
+        case saver, normal, full
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .saver: "Data saver (weak Wi-Fi)"
+            case .normal: "Normal"
+            case .full: "Full quality"
+            }
+        }
+        /// Frames a second asked from the mission's live view (0 = as many as it makes).
+        var missionFPS: Int { self == .saver ? 5 : self == .normal ? 10 : 0 }
     }
+    var videoMode: VideoMode = VideoMode(rawValue: UserDefaults.standard.string(forKey: "videoMode") ?? "") ?? .saver {
+        didSet {
+            UserDefaults.standard.set(videoMode.rawValue, forKey: "videoMode")
+            streamGeneration += 1                     // reopen the streams with the new settings
+        }
+    }
+    /// Bumped when the video settings change: running streams end and reopen with the new URL.
+    private(set) var streamGeneration = 0
+    /// Time the last status reply took (the drone link's health): seconds, nil while offline.
+    private(set) var linkLatency: Double?
     /// The topic the main pane shows right now (nil = the mission's own view).
     var shownTopic: String? { connected ? missionViewTopic : cameraTopic }
     /// Second feed: the thermal camera, straight from the drone, next to the main picture.
@@ -186,7 +208,7 @@ final class MissionClient {
     private var knownDetections = Set<String>()
     private let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
-        c.timeoutIntervalForRequest = 1.5
+        c.timeoutIntervalForRequest = 4               // a busy venue Wi-Fi answers late; late is not lost
         c.requestCachePolicy = .reloadIgnoringLocalCacheData
         c.httpMaximumConnectionsPerHost = 4
         return URLSession(configuration: c)
@@ -203,15 +225,16 @@ final class MissionClient {
                 await self?.pollStatus()
                 // fast while live, gentle back-off while there is no link (no busy retry loop)
                 let live = self?.connected ?? false
-                try? await Task.sleep(for: .milliseconds(live ? 450 : 2000))
+                try? await Task.sleep(for: .milliseconds(live ? 700 : 2000))
             }
         }
         thermalTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
                 if self.streamsThermal, self.connected || self.droneReachable, let topic = self.thermalTopic {
+                    let gen = self.streamGeneration
                     _ = await self.streamFrames(from: self.cameraStreamURL(topic: topic),
-                                                while: { $0.streamsThermal && $0.thermalTopic == topic },
+                                                while: { $0.streamsThermal && $0.thermalTopic == topic && $0.streamGeneration == gen },
                                                 into: { $0.thermalImage = $1 })
                     try? await Task.sleep(for: .milliseconds(400))
                 } else {
@@ -225,8 +248,9 @@ final class MissionClient {
                 guard let self else { return }
                 if self.directVideo, let topic = self.cameraTopic {
                     // No mission running: show the camera straight from the drone.
+                    let gen = self.streamGeneration
                     _ = await self.streamFrames(from: self.cameraStreamURL(topic: topic),
-                                                while: { $0.directVideo && $0.cameraTopic == topic })
+                                                while: { $0.directVideo && $0.cameraTopic == topic && $0.streamGeneration == gen })
                     try? await Task.sleep(for: .milliseconds(300))
                     continue
                 }
@@ -236,15 +260,17 @@ final class MissionClient {
                 }
                 if let topic = self.missionViewTopic, self.videoEndpoint != nil, self.droneReachable {
                     // Mission running, but the operator picked another camera view (e.g. an ArUco debug image).
+                    let gen = self.streamGeneration
                     _ = await self.streamFrames(from: self.cameraStreamURL(topic: topic),
-                                                while: { $0.connected && $0.missionViewTopic == topic })
+                                                while: { $0.connected && $0.missionViewTopic == topic && $0.streamGeneration == gen })
                     try? await Task.sleep(for: .milliseconds(300))
                     continue
                 }
                 // Preferred: frames pushed by the drone over one open connection (lowest latency).
                 // Older mission code has no /stream.mjpg: fall back to fetching single frames.
-                if !self.streamUnsupported, await self.streamFrames(from: self.endpoint.base?.appending(path: "stream.mjpg"),
-                                                                    while: { $0.connected }) {
+                let gen = self.streamGeneration
+                if !self.streamUnsupported, await self.streamFrames(from: self.missionStreamURL,
+                                                                    while: { $0.connected && $0.streamGeneration == gen }) {
                     try? await Task.sleep(for: .milliseconds(200))
                 } else {
                     await self.pollFrame()
@@ -270,7 +296,9 @@ final class MissionClient {
     private func pollStatus() async {
         guard let url = endpoint.base?.appending(path: "status") else { return }
         do {
+            let t0 = Date()
             let (data, response) = try await session.data(from: url)
+            linkLatency = Date().timeIntervalSince(t0)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
             let decoded = try JSONDecoder().decode(MissionStatus.self, from: data)
             apply(decoded)
@@ -279,12 +307,15 @@ final class MissionClient {
                 await probeDrone()
             }
         } catch {
-            if connected, let last = lastUpdate, Date().timeIntervalSince(last) > 3 {
+            if connected, let last = lastUpdate, Date().timeIntervalSince(last) > 8 {       // ~2 missed replies on a slow link
                 connected = false
             } else if lastUpdate == nil {
                 connected = false
             }
-            if !connected { await probeDrone() }
+            if !connected {
+                linkLatency = nil
+                await probeDrone()
+            }
         }
     }
 
@@ -425,11 +456,44 @@ final class MissionClient {
     }
 
     /// Camera stream straight from the drone's web_video_server (works without our mission running).
+    /// The mission's live view, at most `videoMode.missionFPS` frames a second (older drone code ignores the limit).
+    var missionStreamURL: URL? {
+        guard let base = endpoint.base,
+              var c = URLComponents(url: base.appending(path: "stream.mjpg"), resolvingAgainstBaseURL: false) else { return nil }
+        if videoMode.missionFPS > 0 { c.queryItems = [URLQueryItem(name: "fps", value: String(videoMode.missionFPS))] }
+        return c.url
+    }
+
+    /// Camera stream straight from the drone's web_video_server. Size, quality and - for the main camera - frame rate
+    /// follow `videoMode` (measured at the venue: Data saver 29 + 64 KB/s, full 256 + 207 KB/s).
     func cameraStreamURL(topic: String) -> URL? {
         guard let base = videoEndpoint else { return nil }
+        var t = topic
+        var q = 50, size: (Int, Int)? = nil
+        if topic.contains("second_camera") {
+            q = 95                                         // raw picture: the temperature rows must survive JPEG
+        } else if topic.hasPrefix("/thermal") {
+            switch videoMode {
+            case .saver: q = 60; size = (285, 192)
+            case .normal: q = 75
+            case .full: q = 85
+            }
+        } else {
+            switch videoMode {
+            case .saver:
+                q = 40; size = (480, 360)
+                // the throttled copy of the main camera (5 frames/s) instead of the full 30 frames/s
+                if topic.hasSuffix("main_camera/image_raw"), cameraTopics.contains(topic + "_throttled") { t = topic + "_throttled" }
+            case .normal: q = 50
+            case .full: q = 80
+            }
+        }
         var c = URLComponents(url: base.appending(path: "stream"), resolvingAgainstBaseURL: false)
-        c?.queryItems = [URLQueryItem(name: "topic", value: topic), URLQueryItem(name: "type", value: "mjpeg"),
-                         URLQueryItem(name: "quality", value: topic.contains("second_camera") ? "95" : topic.hasPrefix("/thermal") ? "85" : String(streamQuality))]
+        c?.queryItems = [URLQueryItem(name: "topic", value: t), URLQueryItem(name: "type", value: "mjpeg"),
+                         URLQueryItem(name: "quality", value: String(q))]
+        if let size {
+            c?.queryItems? += [URLQueryItem(name: "width", value: String(size.0)), URLQueryItem(name: "height", value: String(size.1))]
+        }
         return c?.url
     }
 }

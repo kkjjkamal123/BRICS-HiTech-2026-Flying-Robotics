@@ -33,7 +33,6 @@ struct PrimaryButtonStyle: ButtonStyle {
                     RoundedRectangle(cornerRadius: 8)
                         .strokeBorder(LinearGradient(colors: [.white.opacity(0.28), .white.opacity(0.04)], startPoint: .top, endPoint: .bottom), lineWidth: 1)
                 }
-                .shadow(color: enabled ? color.opacity(hover ? 0.35 : 0.18) : .clear, radius: hover ? 10 : 6, y: 2)
                 .scaleEffect(configuration.isPressed ? 0.97 : 1)
                 .animation(.snappy(duration: 0.16), value: configuration.isPressed)
                 .animation(.easeOut(duration: 0.15), value: hover)
@@ -150,8 +149,7 @@ struct HoldToConfirmButton: View {
         HStack(spacing: 8) {
             ring
             Text(holding ? "HOLD…" : title)
-                .font(Theme.mono(12.5, .bold))
-                .tracking(0.6)
+                .font(.system(size: 12.5, weight: .bold))
                 .contentTransition(.interpolate)
         }
         .foregroundStyle(Color.white)
@@ -160,11 +158,9 @@ struct HoldToConfirmButton: View {
     }
 
     var body: some View {
-        let glow: Color = enabled ? color.opacity(holding ? 0.55 : 0.25) : .clear
         label
         .background { fill }
         .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.white.opacity(0.22)))
-        .shadow(color: glow, radius: holding ? 14 : 8)
         .scaleEffect(holding ? 0.97 : 1)
         .animation(.snappy(duration: 0.18), value: holding)
         .onHover { hover = $0 }

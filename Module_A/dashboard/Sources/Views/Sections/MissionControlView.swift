@@ -68,12 +68,14 @@ private struct SourceBadge: View {
     var body: some View {
         let m = model.mission
         HStack(spacing: 10) {
-            Text(model.settings.missionSource == .drone ? "TECHNIC 6S · \(m.endpoint.label)" : "SIMULATOR · \(m.endpoint.label)")
-                .font(Theme.mono(11))
-                .foregroundStyle(Theme.textTertiary)
-                .lineLimit(1)
-            StatusPill(text: m.connected ? "Link" : (m.droneReachable ? "Drone online · no mission" : "No link"),
-                       color: m.connected ? Theme.ok : (m.droneReachable ? Theme.signal : Theme.textTertiary), pulsing: m.connected)
+            let lat = m.linkLatency
+            let slow = (lat ?? 0) > 0.4
+            StatusPill(text: m.connected ? (lat.map { String(format: "Link · %.0f ms", $0 * 1000) } ?? "Link")
+                                         : (m.droneReachable ? "Drone online · no mission" : "No link"),
+                       color: m.connected ? (slow ? Theme.caution : Theme.ok) : (m.droneReachable ? Theme.signal : Theme.textTertiary),
+                       pulsing: m.connected)
+                .help(slow ? "The drone answers slowly: its Wi-Fi is overloaded or weak. Switch the camera menu's Video to Data saver, move the router / laptop closer, or use a less crowded Wi-Fi channel."
+                           : "Time the drone's last status reply took")
         }
         .fixedSize()
     }
@@ -137,7 +139,7 @@ private struct CommandBar: View {
                     PhaseTimeline(phase: phase, connected: connected)
                     PhaseSegments(phase: phase, connected: connected)
                 }
-                StatusLine(status: direct ? "Drone online, no mission running. Run mission takes off after a 3 s countdown; Land calls the drone's land service."
+                StatusLine(status: direct ? "Drone online, no mission link on :\(model.settings.missionPort). Run mission takes off after a 3 s countdown; Return Home, Land and ABORT reach the drone over SSH."
                                           : (m.status?.status ?? ""),
                            connected: connected || direct, last: m.lastCommand)
             }
@@ -177,20 +179,24 @@ private struct CommandBar: View {
                         .disabled(!connected || (known && MissionPhase.step(phase) != 0))
                         .help("Start the mission (⇧⌘R)")
                 }
-                Button { m.send(.returnHome) } label: { Label("Return Home", systemImage: "house") }
+                Button { model.command(.returnHome) } label: { Label("Return Home", systemImage: "house") }
                     .buttonStyle(.secondaryLarge)
-                    .disabled(!connected || (known && !["TAKEOFF", "MISSION", "INSPECT"].contains(phase.uppercased())))
-                    .help("Fly back to the home pad and land (⇧⌘H)")
-                Button { if direct { link.landNow() } else { m.send(.land) } } label: { Label("Land", systemImage: "arrow.down.to.line") }
+                    .disabled(direct ? false : (!connected || (known && !["TAKEOFF", "MISSION", "INSPECT"].contains(phase.uppercased()))))
+                    .help(direct ? "No mission link: tells the mission script on the drone over SSH to fly home and land"
+                                 : "Fly back to the home pad and land (⇧⌘H)")
+                Button { model.command(.land) } label: { Label("Land", systemImage: "arrow.down.to.line") }
                     .buttonStyle(.secondaryLarge)
                     .disabled(direct ? false : (!connected || (known && !MissionPhase.isAirborne(phase))))
                     .help(direct ? "Calls the drone's land service directly - works whatever script is flying it"
                                  : "Land where the drone is now (⇧⌘L)")
+                if model.settings.missionSource == .drone {
+                    RebootDroneButton(reachable: connected || m.droneReachable)
+                }
             }
             .labelStyle(.titleAndIcon)
             .fixedSize()
             BarDivider()
-            HoldToConfirmButton(title: "ABORT", symbol: "xmark") { if direct { link.landNow() } else { m.send(.abort) } }
+            HoldToConfirmButton(title: "ABORT", symbol: "xmark") { model.command(.abort) }
                 .disabled(direct ? false : (!connected || MissionPhase.isFinished(phase)))
                 .fixedSize()
                 .scaleEffect(34.0 / 38.0)   // the shared hold button is 38 pt; match the 34 pt row
@@ -199,8 +205,12 @@ private struct CommandBar: View {
         .padding(.leading, 18)
         .padding(.trailing, 12)
         .frame(height: 62)
-        .glassEffect(.regular.tint(Theme.canvas.opacity(0.35)), in: .rect(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.hairline))
+        .background {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Theme.panelRaised)
+                .shadow(color: .black.opacity(0.45), radius: 18, y: 6)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.hairlineStrong))
     }
 }
 
@@ -214,7 +224,8 @@ private struct RunMissionButton: View {
         let blocked = !model.missionSettings.problems(markerField: MissionSettings.Venue.markerField(from: m.status?.markers)).isEmpty
         let replacing = m.connected || model.console.jobs.contains { $0.isRunning && $0.title.hasPrefix("Case 1 mission") }
         Button { model.runNewDroneMission() } label: {
-            Label(replacing ? "Run new mission" : "Run mission", systemImage: "play.fill")
+            Label(model.missionSettings.kind == .flameRTH ? (replacing ? "Run new flame RTH" : "Run flame RTH")
+                                                          : (replacing ? "Run new mission" : "Run mission"), systemImage: "play.fill")
         }
         .buttonStyle(.primaryLarge)
         .disabled(model.droneMissionAirborne || blocked)
@@ -222,6 +233,31 @@ private struct RunMissionButton: View {
               : blocked ? "Mission settings have a problem - open Settings."
               : replacing ? "Stops the previous mission (only while the motors are disarmed), clears the screen and runs a fresh one: pre-flight, 3 s countdown, take-off."
               : "Runs the Case 1 mission with your Mission settings: pre-flight check, 3 s countdown, take-off. ABORT cancels.")
+    }
+}
+
+/// Reboot drone: restarts the flight controller and the Orange Pi (everything). Asks first; never while flying.
+private struct RebootDroneButton: View {
+    @Environment(AppModel.self) private var model
+    let reachable: Bool
+    @State private var asking = false
+
+    var body: some View {
+        Button { asking = true } label: { Label("Reboot", systemImage: "power") }
+            .buttonStyle(.secondaryLarge)
+            .disabled(model.droneMissionAirborne || !reachable)
+            .help(model.droneMissionAirborne ? "The drone is flying - land it first."
+                  : !reachable ? "The drone does not answer - switch it off and on with the battery."
+                  : "Reboot the flight controller and the Orange Pi (everything). Back in about 1-2 minutes.")
+            .confirmationDialog("Reboot the whole drone?", isPresented: $asking) {
+                Button("Reboot flight controller + Orange Pi", role: .destructive) {
+                    for job in model.console.jobs where job.isRunning && job.title.hasPrefix("Case 1 mission") { job.detach() }
+                    DroneLink(settings: model.settings, console: model.console).rebootDrone()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Stops any mission script, restarts the flight controller and the Orange Pi. The motors must be disarmed (the drone refuses otherwise). The cameras, the thermal node and ROS come back by themselves in about 1-2 minutes; the dashboard reconnects on its own.")
+            }
     }
 }
 
@@ -263,8 +299,8 @@ private struct PhaseReadout: View {
                 LiveDot(color: live ? color : Theme.textTertiary, live: live)
                 Eyebrow(text: "Phase")
             }
-            Text(phase.uppercased())
-                .font(Theme.mono(17, .semibold))
+            Text(phase.capitalized)
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .contentTransition(.interpolate)
@@ -290,9 +326,8 @@ private struct PhaseTimeline: View {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(Theme.textTertiary.opacity(0.7))
                 }
-                Text(step)
-                    .font(Theme.mono(9.5, i == current ? .bold : .medium))
-                    .tracking(0.3)
+                Text(step.capitalized)
+                    .font(.system(size: 11, weight: i == current ? .semibold : .regular))
                     .foregroundStyle(stepColor(i, current: current, color: color))
                     .padding(.horizontal, 5)
                     .frame(height: 17)
@@ -413,21 +448,21 @@ private struct ThermalPane: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if m.thermalTopic == nil {
-                NoSignal(title: "NO THERMAL CAMERA", detail: "The drone does not see it. Plug the TR256i into the drone's USB port.")
+                NoSignal(title: "No thermal camera", detail: "The drone does not see it. Plug the TR256i into the drone's USB port.")
             } else {
-                NoSignal(title: "ACQUIRING THERMAL", detail: "Opening the thermal camera", busy: true)
+                NoSignal(title: "Connecting to the thermal camera", detail: "Opening the thermal camera", busy: true)
             }
             VStack {
                 HStack(spacing: 6) {
                     HUDChip {
                         LiveDot(color: m.thermalImage != nil ? Theme.critical : Theme.textTertiary, live: m.thermalImage != nil)
-                        Text("THERMAL").foregroundStyle(Theme.textPrimary)
+                        Text("Thermal").foregroundStyle(Theme.textPrimary)
                     }
                     if m.thermalIsRaw {
                         Button { m.thermalPalette.toggle() } label: {
                             HUDChip {
                                 Image(systemName: "thermometer.medium").foregroundStyle(Theme.textTertiary)
-                                Text(m.thermalPalette ? "IRON" : "WHITE HOT").foregroundStyle(Theme.textPrimary)
+                                Text(m.thermalPalette ? "Iron" : "White hot").foregroundStyle(Theme.textPrimary)
                             }
                         }
                         .buttonStyle(.plain)
@@ -470,15 +505,15 @@ private struct CameraFrameLayer: View {
                             .frame(width: 44, height: 44)
                             .allowsHitTesting(false)
                     } else {
-                        NoSignal(title: "SIGNAL LOST", detail: "Showing the last frame received")
+                        NoSignal(title: "Signal lost", detail: "Showing the last frame received")
                     }
                 }
         } else if m.connected {
-            NoSignal(title: "ACQUIRING VIDEO", detail: "Telemetry is live, waiting for the first camera frame", busy: true)
+            NoSignal(title: "Waiting for video", detail: "Telemetry is live, waiting for the first camera frame", busy: true)
         } else if m.directVideo {
-            NoSignal(title: "ACQUIRING VIDEO", detail: "Drone found, opening \(m.cameraTopic ?? "camera")", busy: true)
+            NoSignal(title: "Waiting for video", detail: "Drone found, opening \(m.cameraTopic ?? "camera")", busy: true)
         } else {
-            NoSignal(title: "NO SIGNAL", detail: "Connect to the drone or start the simulator")
+            NoSignal(title: "No video", detail: "Connect to the drone or start the simulator")
         }
     }
 }
@@ -498,8 +533,7 @@ private struct NoSignal: View {
                     .foregroundStyle(Theme.textTertiary)
             }
             Text(title)
-                .font(Theme.mono(12, .semibold))
-                .tracking(2)
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.textSecondary)
             Text(detail)
                 .font(.system(size: 11.5))
@@ -536,15 +570,15 @@ private struct CameraHUD: View {
                 HStack(spacing: 6) {
                     HUDChip {
                         LiveDot(color: live ? Theme.critical : Theme.textTertiary, live: live)
-                        Text(live ? "LIVE" : "OFFLINE").foregroundStyle(live ? Theme.textPrimary : Theme.textTertiary)
+                        Text(live ? "Live" : "Offline").foregroundStyle(live ? Theme.textPrimary : Theme.textTertiary)
                     }
                     if m.videoLive || model.recorder.isRecording { RecordButton() }
                     if m.videoEndpoint != nil, m.directVideo || (m.connected && m.droneReachable) { CameraTopicMenu() }
                     if m.directVideo, m.thermalFrame {
                         Button { m.thermalPalette.toggle() } label: {
                             HUDChip {
-                                Image(systemName: "thermometer.medium").foregroundStyle(Theme.textTertiary)
-                                Text(m.thermalPalette ? "IRON" : "WHITE HOT").foregroundStyle(Theme.textPrimary)
+                                Image(systemName: "thermometer.medium").foregroundStyle(.white.opacity(0.6))
+                                Text(m.thermalPalette ? "Iron" : "White hot").foregroundStyle(Theme.textPrimary)
                             }
                         }
                         .buttonStyle(.plain)
@@ -555,10 +589,9 @@ private struct CameraHUD: View {
                 HStack(spacing: 6) {
                     ForEach(fps, id: \.key) { cam, v in
                         HUDChip {
-                            Text(cam.uppercased()).foregroundStyle(Theme.textTertiary)
+                            Text(cam == "rgb" ? "RGB" : cam.capitalized).foregroundStyle(.white.opacity(0.6))
                             Text(String(format: "%.0f", v)).foregroundStyle(v >= 10 ? Theme.textPrimary : Theme.caution)
-                                .contentTransition(.numericText(value: v))
-                            Text("FPS").foregroundStyle(Theme.textTertiary)
+                            Text("FPS").foregroundStyle(.white.opacity(0.6))
                         }
                     }
                 }
@@ -567,24 +600,22 @@ private struct CameraHUD: View {
             HStack(alignment: .bottom) {
                 if let p = s?.position {
                     HUDChip {
-                        Text("ALT").foregroundStyle(Theme.textTertiary)
+                        Text("Alt").foregroundStyle(.white.opacity(0.6))
                         Text(String(format: "%.2f", p.z)).foregroundStyle(Theme.textPrimary)
-                            .contentTransition(.numericText())
-                        Text("m").foregroundStyle(Theme.textTertiary)
+                        Text("m").foregroundStyle(.white.opacity(0.6))
                     }
                 }
                 Spacer(minLength: 8)
                 if let p = s?.position {
                     HUDChip {
-                        Text("X").foregroundStyle(Theme.textTertiary)
+                        Text("X").foregroundStyle(.white.opacity(0.6))
                         Text(String(format: "%.2f", p.x)).foregroundStyle(Theme.textPrimary)
-                        Text("Y").foregroundStyle(Theme.textTertiary)
+                        Text("Y").foregroundStyle(.white.opacity(0.6))
                         Text(String(format: "%.2f", p.y)).foregroundStyle(Theme.textPrimary)
                     }
                 }
             }
         }
-        .animation(.smooth(duration: 0.3), value: s?.pos)
     }
 }
 
@@ -622,18 +653,15 @@ private struct CameraTopicMenu: View {
             }
             .pickerStyle(.inline)
             Divider()
-            Picker("Stream quality", selection: Binding(get: { m.streamQuality }, set: { m.streamQuality = $0 })) {
-                Text("Low (30) - weak Wi-Fi").tag(30)
-                Text("Medium (50)").tag(50)
-                Text("High (80)").tag(80)
-                Text("Full (95)").tag(95)
+            Picker("Video", selection: Binding(get: { m.videoMode }, set: { m.videoMode = $0 })) {
+                ForEach(MissionClient.VideoMode.allCases) { Text($0.title).tag($0) }
             }
-            .help("JPEG quality of camera topics streamed straight from the drone. The mission view has its own quality (ui.quality).")
+            .help("How much video comes over the drone's Wi-Fi. Data saver: main camera 5 frames/s at 480 px, thermal at half size - about 5x less data. Use it whenever the link drops.")
         } label: {
             HUDChip {
-                Image(systemName: "video").foregroundStyle(Theme.textTertiary)
+                Image(systemName: "video").foregroundStyle(.white.opacity(0.6))
                 Text(m.shownTopic.map(MissionClient.topicTitle) ?? "Mission view").foregroundStyle(Theme.textPrimary).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold)).foregroundStyle(Theme.textTertiary)
+                Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold)).foregroundStyle(.white.opacity(0.6))
             }
         }
         .menuStyle(.button)
@@ -672,10 +700,10 @@ private struct RecordButton: View {
                         let s = max(0, Int(ctx.date.timeIntervalSince(t0)))
                         Text(String(format: "REC %d:%02d", s / 60, s % 60)).foregroundStyle(Theme.textPrimary)
                     }
-                    Text(r.cameras == .both ? "MAIN+THERMAL" : r.cameras == .main ? "MAIN" : "THERMAL").foregroundStyle(Theme.textTertiary)
+                    Text(r.cameras == .both ? "Main + thermal" : r.cameras == .main ? "Main" : "Thermal").foregroundStyle(.white.opacity(0.6))
                 } else {
                     Text("REC").foregroundStyle(Theme.textSecondary)
-                    Text(r.cameras == .both ? "BOTH" : r.cameras == .main ? "MAIN" : "THERMAL").foregroundStyle(Theme.textTertiary)
+                    Text(r.cameras == .both ? "Both" : r.cameras == .main ? "Main" : "Thermal").foregroundStyle(.white.opacity(0.6))
                 }
             }
         } primaryAction: {
@@ -695,12 +723,11 @@ private struct HUDChip<Content: View>: View {
 
     var body: some View {
         HStack(spacing: 5) { content }
-            .font(Theme.mono(10.5, .semibold))
-            .monospacedDigit()
+            .font(Theme.mono(11, .semibold))
             .lineLimit(1)
             .padding(.horizontal, 8)
             .frame(height: 22)
-            .background(Color.black.opacity(0.55), in: .rect(cornerRadius: 6))
+            .background(Color.black.opacity(0.72), in: .rect(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75))
             .fixedSize()
     }
@@ -725,7 +752,8 @@ private struct LiveMapCard: View {
                          objects: (s?.detections ?? []).map {
                              MapObject(id: $0.stableID, label: $0.mapLabel, name: $0.name,
                                        x: $0.x ?? 0, y: $0.y ?? 0, time: $0.time)
-                         })
+                         },
+                         arena: model.arena)
                 .overlay {
                     if s == nil {
                         Label("Awaiting telemetry", systemImage: "location.slash")
@@ -774,7 +802,7 @@ private struct TelemetryRail: View {
         let cell = bat.isFresh ? bat.voltage.map { $0 / 6 } : s?.cellVoltage
         let percent = bat.percent ?? cell.map { BatteryMonitor.percent(cellVoltage: $0) }
         let thermal = s?.fps?["thermal"] ?? s?.fps?["rgb"]
-        let fires = s?.counts?.filter { ["fire", "flame", "hotspot"].contains($0.key.lowercased()) }.values.reduce(0, +) ?? 0
+        let fires = s?.counts?.filter { ["fire", "flame", "hotspot", "tree_fire"].contains($0.key.lowercased()) }.values.reduce(0, +) ?? 0
         let objects = s?.detections?.count ?? 0
         let plan = PlanInfo(log: s?.log ?? [])
         HStack(spacing: 0) {
@@ -810,7 +838,6 @@ private struct TelemetryRail: View {
         .frame(height: 92)
         .background(Theme.panel, in: .rect(cornerRadius: Theme.radius))
         .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.hairline))
-        .animation(.smooth(duration: 0.3), value: s?.pos)
     }
 
     private func batteryTint(_ v: Double?) -> Color {
@@ -854,7 +881,6 @@ private struct RailCell: View {
                     .font(Theme.mono(21, .medium))
                     .foregroundStyle(value == nil ? Theme.textTertiary : tint)
                     .monospacedDigit()
-                    .contentTransition(.numericText())
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 if let unit, value != nil {
@@ -979,7 +1005,7 @@ private struct DetectionsCard: View {
                 CardHeader(title: "Confirmed objects", symbol: "scope",
                            trailing: Text("\(dets.count)").font(Theme.mono(11, .semibold))
                                .foregroundStyle(dets.isEmpty ? Theme.textTertiary : Theme.accent)
-                               .contentTransition(.numericText()).eraseToAnyView())
+                               .eraseToAnyView())
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 8)
@@ -1022,7 +1048,7 @@ private struct DetectionColumns: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            cell(d.map { String(format: "#%d", $0.id ?? 0) } ?? "ID", width: 34, align: .leading, primary: true)
+            cell(d.map { String(format: "#%d", $0.id ?? 0) } ?? "#", width: 34, align: .leading, primary: true)
             HStack(spacing: 6) {
                 if let d {
                     Image(systemName: Theme.symbol(forObject: d.name))
@@ -1030,23 +1056,22 @@ private struct DetectionColumns: View {
                         .foregroundStyle(Theme.color(forObject: d.name))
                         .frame(width: 12)
                 }
-                Text(d?.name.capitalized ?? "CLASS")
+                Text(d.map { Theme.label(forObject: $0.name) } ?? "Class")
                     .font(header ? Theme.mono(9.5, .semibold) : .system(size: 12.5, weight: .medium))
                     .foregroundStyle(header ? Theme.textTertiary : Theme.textPrimary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            cell(d.map { String(format: "%.2f", $0.x ?? .nan) } ?? "X (m)", width: 52, align: .trailing)
-            cell(d.map { String(format: "%.2f", $0.y ?? .nan) } ?? "Y (m)", width: 52, align: .trailing)
-            cell(d.map { String(format: "%.0f%%", ($0.conf ?? 0) * 100) } ?? "CONF", width: 42, align: .trailing)
-            cell(d.map { $0.time ?? "—" } ?? "TIME", width: 62, align: .trailing)
+            cell(d.map { String(format: "%.2f", $0.x ?? .nan) } ?? "X m", width: 52, align: .trailing)
+            cell(d.map { String(format: "%.2f", $0.y ?? .nan) } ?? "Y m", width: 52, align: .trailing)
+            cell(d.map { String(format: "%.0f%%", ($0.conf ?? 0) * 100) } ?? "Conf", width: 42, align: .trailing)
+            cell(d.map { $0.time ?? "—" } ?? "Time", width: 62, align: .trailing)
         }
     }
 
     private func cell(_ text: String, width: CGFloat, align: Alignment, primary: Bool = false) -> some View {
         Text(text)
-            .font(header ? Theme.mono(9.5, .semibold) : Theme.mono(11.5, primary ? .semibold : .regular))
-            .tracking(header ? 0.4 : 0)
+            .font(header ? .system(size: 11, weight: .medium) : Theme.mono(11.5, primary ? .semibold : .regular))
             .foregroundStyle(header ? Theme.textTertiary : primary ? Theme.textPrimary : Theme.textSecondary)
             .monospacedDigit()
             .lineLimit(1)
@@ -1085,7 +1110,7 @@ private struct AltitudeCard: View {
                 CardHeader(title: "Altitude", symbol: "chart.line.uptrend.xyaxis",
                            trailing: Text(h.last.map { String(format: "%.2f m", $0.altitude) } ?? "—")
                                .font(Theme.mono(11, .medium)).foregroundStyle(Theme.textSecondary)
-                               .contentTransition(.numericText()).eraseToAnyView())
+                               .eraseToAnyView())
                 if h.count < 2 {
                     VStack(spacing: 6) {
                         Image(systemName: "chart.xyaxis.line").font(.system(size: 18, weight: .light)).foregroundStyle(Theme.textTertiary)
@@ -1126,16 +1151,16 @@ private struct AltitudeChart: View {
                 RuleMark(y: .value("Target", target))
                     .foregroundStyle(Theme.textSecondary.opacity(0.6))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .annotation(position: .top, alignment: .leading, spacing: 2) {
-                        ruleLabel(String(format: "TARGET %.1f m", target), color: Theme.textTertiary)
+                    .annotation(position: .bottom, alignment: .trailing, spacing: 2) {
+                        ruleLabel(String(format: "Target %.1f m", target), color: Theme.textSecondary)
                     }
             }
             if let ceiling {
                 RuleMark(y: .value("Ceiling", ceiling))
                     .foregroundStyle(Theme.critical.opacity(0.5))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .annotation(position: .bottom, alignment: .leading, spacing: 2) {
-                        ruleLabel(String(format: "GEOFENCE %.1f m", ceiling), color: Theme.critical.opacity(0.8))
+                    .annotation(position: .top, alignment: .leading, spacing: 2) {
+                        ruleLabel(String(format: "Geofence %.1f m", ceiling), color: Theme.critical.opacity(0.85))
                     }
             }
         }

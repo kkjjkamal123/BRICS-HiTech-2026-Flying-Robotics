@@ -20,7 +20,7 @@ struct SpecView: View {
         }
     }
 
-    /// The spec scores Case 1 (forest fire); other run folders are skipped.
+    /// The spec scores Case 1 (forest fire); other mission folders (e.g. Case 3 swarm) are skipped.
     private var latestRun: RunSummary? {
         let runs = model.runs.missionRuns
         return runs.first { $0.id.hasPrefix("case1") } ?? runs.first
@@ -129,9 +129,8 @@ private struct ColumnHeader: View {
     }
 
     private func label(_ s: String) -> some View {
-        Text(s.uppercased())
-            .font(.system(size: 10, weight: .semibold))
-            .tracking(0.7)
+        Text(s)
+            .font(.system(size: 11, weight: .medium))
             .foregroundStyle(Theme.textTertiary)
             .lineLimit(1)
     }
@@ -372,7 +371,7 @@ private struct TruePositionEditor: View {
     }
 
     private func head(_ s: String) -> some View {
-        Text(s.uppercased()).font(.system(size: 9.5, weight: .semibold)).tracking(0.6).foregroundStyle(Theme.textTertiary)
+        Text(s).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textTertiary)
     }
 
     @ViewBuilder private func errorText(_ o: RunObject) -> some View {
@@ -381,7 +380,6 @@ private struct TruePositionEditor: View {
             Text(String(format: "%.2f m", e))
                 .font(Theme.mono(12, .medium))
                 .foregroundStyle(e <= 0.5 ? Theme.ok : Theme.critical)
-                .contentTransition(.numericText())
         } else {
             Text("—").font(Theme.mono(12)).foregroundStyle(Theme.textTertiary)
         }
@@ -607,7 +605,6 @@ private struct ChecklistPanel: View {
             Text("\(spec.checked.count) / \(spec.checklist.count)")
                 .font(Theme.mono(11.5, .medium))
                 .foregroundStyle(Theme.textSecondary)
-                .contentTransition(.numericText())
             Button("Reset", systemImage: "arrow.counterclockwise") {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { spec.resetChecklist() }
             }

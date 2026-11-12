@@ -42,6 +42,8 @@ final class FlightRecorder {
     private var writers: [String: VideoTrackWriter] = [:]
     /// Writers of the last recording, kept alive while AVFoundation finishes the files.
     private var retired: [VideoTrackWriter] = []
+    /// Part number per camera (a new part starts if the encoder ever fails mid-recording).
+    private var parts: [String: Int] = [:]
 
     func start(root: URL) {
         guard !isRecording else { return }
@@ -58,6 +60,7 @@ final class FlightRecorder {
         folder = dir
         writers = Dictionary(uniqueKeysWithValues: cameras.tracks.map { ($0, VideoTrackWriter(url: dir.appending(path: "\($0).mp4"))) })
         frameCounts = Dictionary(uniqueKeysWithValues: cameras.tracks.map { ($0, 0) })
+        parts = [:]
         lastError = nil
         startedAt = .now
         isRecording = true
@@ -85,7 +88,13 @@ final class FlightRecorder {
         guard isRecording, let image, let w = writers[track],
               let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         if w.append(cg) { frameCounts[track, default: 0] += 1 }
-        if let e = w.error { lastError = "\(track): \(e)" }
+        if w.failed, let folder {
+            // the encoder gave up on this file (it stays playable up to its last 2 s fragment): carry on in a new part
+            lastError = "\(track): \(w.error ?? "writer failed") - continuing in a new file"
+            parts[track, default: 1] += 1
+            retired.append(w)
+            writers[track] = VideoTrackWriter(url: folder.appending(path: "\(track)_part\(parts[track]!).mp4"))
+        }
     }
 
     func revealInFinder() {
@@ -105,7 +114,14 @@ final class VideoTrackWriter {
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var width = 0, height = 0
     private var start: Date?
-    private var lastT = -1.0
+    private var lastValue: CMTimeValue = -1
+    /// Movie AND track on the same 1/600 s clock, and at least 20 ms (12 ticks) between saved frames. Mixing a
+    /// microsecond movie clock with the track's own coarser clock let two burst frames collapse onto one tick, and
+    /// the 2-second fragment header then failed (-16341, MovieHeaderMaker) - every ~2 s at the venue on 11 Nov.
+    private static let timescale: CMTimeScale = 600
+    private static let minGap: CMTimeValue = 12
+    /// The encoder rejected the file; the recorder continues in a new part.
+    var failed: Bool { writer?.status == .failed }
 
     init(url: URL) { self.url = url }
 
@@ -118,8 +134,8 @@ final class VideoTrackWriter {
         }
         guard let writer, writer.status == .writing, let input, let adaptor, let start,
               input.isReadyForMoreMediaData, let pool = adaptor.pixelBufferPool else { return false }
-        let t = now.timeIntervalSince(start)
-        guard t > lastT + 0.001 else { return false }
+        let time = CMTime(seconds: now.timeIntervalSince(start), preferredTimescale: Self.timescale)
+        guard lastValue < 0 || time.value >= lastValue + Self.minGap else { return false }   // burst frame < 20 ms: skip it
         var buffer: CVPixelBuffer?
         CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
         guard let buffer else { return false }
@@ -135,11 +151,11 @@ final class VideoTrackWriter {
             ctx.draw(cg, in: CGRect(x: (Double(width) - w) / 2, y: (Double(height) - h) / 2, width: w, height: h))
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
-        guard adaptor.append(buffer, withPresentationTime: CMTime(seconds: t, preferredTimescale: 600)) else {
+        guard adaptor.append(buffer, withPresentationTime: time) else {
             error = writer.error?.localizedDescription ?? "frame not written"
             return false
         }
-        lastT = t
+        lastValue = time.value
         return true
     }
 
@@ -148,11 +164,15 @@ final class VideoTrackWriter {
         height = max(16, h & ~1)
         do {
             let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+            // fragmented file: everything up to the last 2 s stays playable even if the app quits or crashes mid-recording
+            writer.movieFragmentInterval = CMTime(seconds: 2, preferredTimescale: 600)
+            writer.movieTimeScale = Self.timescale
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
                 AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: width, AVVideoHeightKey: height,
                 AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: max(1_000_000, width * height * 6)],
             ])
             input.expectsMediaDataInRealTime = true
+            input.mediaTimeScale = Self.timescale
             let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
                 kCVPixelBufferWidthKey as String: width, kCVPixelBufferHeightKey as String: height,

@@ -173,9 +173,9 @@ enum FlightTest: String, Identifiable {
     }
     var tag: String {
         switch self {
-        case .motorRamp: "BENCH"
-        case .hover, .roam: "FLIGHT"
-        case .mission: "MISSION"
+        case .motorRamp: "Bench"
+        case .hover, .roam: "Flight"
+        case .mission: "Mission"
         }
     }
     var script: String {
@@ -255,7 +255,7 @@ private struct TestCard: View {
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
             Spacer(minLength: 8)
             Text(test.script)
-                .font(Theme.mono(11))
+                .font(Theme.code(11))
                 .foregroundStyle(Theme.textTertiary)
                 .lineLimit(1)
         }
@@ -267,17 +267,18 @@ private struct TestCard: View {
             ParamSlider(label: "Peak throttle", value: $throttle, range: 10...60, step: 5, format: "%.0f", unit: "%")
             ParamInfoRow(label: "Profile", value: "3 s up · 2 s hold · 10 s down")
         case .hover:
-            ParamSlider(label: "Altitude", value: $altitude, range: 0.5...2.0, step: 0.1, format: "%.1f", unit: "m")
+            ParamSlider(label: "Altitude", value: $altitude, range: 0.5...3.0, step: 0.1, format: "%.1f", unit: "m")
             ParamSlider(label: "Hold", value: $hold, range: 2...30, step: 1, format: "%.0f", unit: "s")
         case .roam:
-            ParamSlider(label: "Altitude", value: $altitude, range: 1.0...2.0, step: 0.1, format: "%.1f", unit: "m")
+            ParamSlider(label: "Altitude", value: $altitude, range: 1.0...3.0, step: 0.1, format: "%.1f", unit: "m")
             ParamSlider(label: "Line spacing", value: $radius, range: 0.5...1.5, step: 0.25, format: "%.2f", unit: "m")
             ParamInfoRow(label: "Area", value: "marker field minus 0.5 m")
         case .mission:
             let ms = model.missionSettings
+            ParamInfoRow(label: "Flight", value: ms.kind == .flameRTH ? "Flame → return home (3 lines)" : "Full Case 1 survey")
             ParamInfoRow(label: "Scan area", value: String(format: "x %.2f…%.2f  y %.2f…%.2f m", ms.area[0], ms.area[2], ms.area[1], ms.area[3]))
             ParamInfoRow(label: "Boundary", value: String(format: "x %.2f…%.2f  y %.2f…%.2f m", ms.fence[0], ms.fence[2], ms.fence[1], ms.fence[3]))
-            ParamInfoRow(label: "Flight", value: String(format: "alt %.1f m · lines %@%.2f m · %.2f m/s", ms.altitude, ms.spacingAuto ? "auto " : "", ms.effectiveSpacing, ms.speed))
+            ParamInfoRow(label: "Height", value: String(format: "alt %.1f m · lines %@%.2f m · %.2f m/s", ms.altitude, ms.spacingAuto ? "auto " : "", ms.effectiveSpacing, ms.speed))
             HStack(spacing: 12) {
                 ParamInfoRow(label: "Fire", value: String(format: "≥ %.0f °C", ms.fireC))
                 Button("Edit…") { model.showMissionSettings = true }
@@ -333,7 +334,7 @@ private struct TestCard: View {
         case .motorRamp: ["--max", String(format: "%.2f", throttle / 100)]
         case .hover: ["--alt", String(format: "%.1f", altitude), "--hold", String(Int(hold))]
         case .roam: ["--pattern", "lawnmower", "--alt", String(format: "%.1f", altitude), "--spacing", String(format: "%.2f", radius)]
-        case .mission: model.missionSettings.setArguments
+        case .mission: model.missionSettings.launcherArguments
         }
     }
 
@@ -354,7 +355,7 @@ private struct TestCard: View {
         case .motorRamp:
             link.runScript("Motor ramp \(Int(throttle))%" + suffix, script: test.script, args: scriptArgs + mode)
         case .hover:
-            link.runScript("Hover \(String(format: "%.1f", altitude)) m" + suffix, script: test.script, args: scriptArgs + mode)
+            link.copyAndRunScript("Hover \(String(format: "%.1f", altitude)) m" + suffix, toolkit: model.settings.toolkitRoot, script: test.script, args: scriptArgs + mode)
         case .roam:
             link.copyAndRunScript("ArUco lawn-mower" + suffix, toolkit: model.settings.toolkitRoot, script: test.script, args: scriptArgs + mode)
         case .mission:
@@ -397,7 +398,6 @@ struct ParamSlider: View {
                 Text(String(format: format, value))
                     .font(Theme.mono(12.5, .medium))
                     .foregroundStyle(Theme.textPrimary)
-                    .contentTransition(.numericText(value: value))
                     .animation(.snappy(duration: 0.2), value: value)
                 Text(unit)
                     .font(Theme.mono(11))
@@ -446,8 +446,7 @@ struct ParamTag: View {
 
     var body: some View {
         Text(text)
-            .font(Theme.mono(9.5, .semibold))
-            .tracking(0.6)
+            .font(.system(size: 10, weight: .medium))
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 5)
             .frame(height: 16)
@@ -470,7 +469,7 @@ private struct CommandPreview: View {
                 .textSelection(.enabled)
             Spacer(minLength: 0)
         }
-        .font(Theme.mono(11))
+        .font(Theme.code(11))
         .padding(.horizontal, 10)
         .frame(height: 28)
         .background(Theme.well, in: .rect(cornerRadius: 7))

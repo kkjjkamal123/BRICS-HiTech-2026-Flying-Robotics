@@ -54,7 +54,7 @@ final class AIModelStore {
         func cells(_ line: Substring) -> [String] {
             line.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "") }
         }
-        let rows = text.split(separator: "\n").filter { $0.hasPrefix("|") }
+        let rows = text.split(whereSeparator: \.isNewline).filter { $0.hasPrefix("|") }
         guard let header = rows.first.map(cells),
               let i50 = header.firstIndex(of: "mAP50"),
               let all = rows.map(cells).first(where: { $0.first == "all" }) else { return (nil, nil) }

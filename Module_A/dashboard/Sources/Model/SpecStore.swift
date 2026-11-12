@@ -6,10 +6,10 @@ enum Verdict: String, Sendable {
 
     var title: String {
         switch self {
-        case .pass: "PASS"
-        case .fail: "FAIL"
-        case .pending: "NOT MEASURED"
-        case .manual: "EXPERT CHECK"
+        case .pass: "Pass"
+        case .fail: "Fail"
+        case .pending: "Not measured"
+        case .manual: "Expert check"
         }
     }
 }
@@ -96,7 +96,7 @@ final class SpecStore {
         }
         // C3 extra object
         let trees = run.counts["tree"] ?? 0
-        set("C3", "\(trees) tree(s) mapped", trees >= 1 ? .pass : .fail)
+        set("C3", trees == 1 ? "1 tree mapped" : "\(trees) trees mapped", trees >= 1 ? .pass : .fail)
         // C4 FPS on the thermal stream
         if let span = run.fps?.best(camera: "thermal") ?? run.fps?.best(camera: "rgb") {
             set("C4", String(format: "%.0f%% of %ds ≥ 10 FPS (mean %.1f)", span.pctAtLeast10, span.seconds, span.meanFPS),
@@ -158,7 +158,7 @@ final class SpecStore {
                    criterion: "1.5 ± 0.15 m · drift ≤ 0.2 m · lands and disarms without RC", status: "Flown 9 Nov 2026", done: true),
         SpecModule(id: "M2", title: "Thermal perception", contents: "TR256i °C stream · ≥ 100 °C rule · thermal YOLO + RGB flame YOLO (RKNN NPU) · tree detector · tracker",
                    function: "Bench: drone held still 1.5 m above the lit mock campfire",
-                   criterion: "fire confirmed ≤ 3 s · conf ≥ 0.5 · ≥ 10 FPS", status: "Needs trained fire model", done: false),
+                   criterion: "fire confirmed ≤ 3 s · conf ≥ 0.5 · ≥ 10 FPS", status: "Fires confirmed in flight 11 Nov 2026", done: true),
         SpecModule(id: "M3", title: "Ground station & logging", contents: "Operator UI :8090 · this dashboard · events.csv · report",
                    function: "Detection appears on the live map; commands acknowledged",
                    criterion: "type, X/Y, time on map · row in events.csv · command ≤ 1 s", status: "Verified in simulation", done: true),
