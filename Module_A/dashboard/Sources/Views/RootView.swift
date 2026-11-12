@@ -13,6 +13,7 @@ struct RootView: View {
             detail
         }
         .toolbar { MainToolbar() }
+        .containerBackground(for: .window) { WindowBackdrop().ignoresSafeArea() }
         .overlay(alignment: .top) { DetectionToast() }
         .sheet(isPresented: $model.showMissionSettings) { MissionSettingsSheet().environment(model) }
         .preferredColorScheme(.dark)
@@ -58,6 +59,8 @@ private struct Sidebar: View {
                             } icon: {
                                 Image(systemName: s.symbol)
                                     .foregroundStyle(selection == s ? Theme.accent : Theme.textSecondary)
+                                    .scaleEffect(selection == s ? 1.1 : 1)
+                                    .animation(.spring(duration: 0.35, bounce: 0.55), value: selection == s)
                             }
                         }
                     }
@@ -154,6 +157,9 @@ private struct MainToolbar: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItem(placement: .principal) {
             ActivityField()
+        }
+        ToolbarItem(placement: .navigation) {
+            AppearanceMenu()
         }
         ToolbarItemGroup(placement: .primaryAction) {
             Button("Return Home", systemImage: "house") { model.command(.returnHome) }

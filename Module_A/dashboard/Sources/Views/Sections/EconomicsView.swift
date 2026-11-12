@@ -199,8 +199,7 @@ private struct VerdictLine: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 44)
-        .background(Theme.panel, in: .rect(cornerRadius: Theme.radius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.hairline))
+        .surface(cornerRadius: Theme.radius)
     }
 
     private func num(_ s: String) -> Text {
@@ -230,8 +229,7 @@ private struct ReadoutStrip: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .background(Theme.panel, in: .rect(cornerRadius: Theme.radius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.hairline))
+        .surface(cornerRadius: Theme.radius)
         .animation(.snappy(duration: 0.2), value: columns)
     }
 }

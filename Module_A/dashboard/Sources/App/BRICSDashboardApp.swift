@@ -37,9 +37,15 @@ struct BRICSDashboardApp: App {
         }
 
         Settings {
-            SettingsView()
-                .environment(model)
-                .frame(width: 560, height: 520)
+            TabView {
+                Tab("Drone", systemImage: "antenna.radiowaves.left.and.right") {
+                    SettingsView().environment(model)
+                }
+                Tab("Appearance", systemImage: "paintpalette") {
+                    AppearanceSettings()
+                }
+            }
+            .frame(width: 600, height: 760)
         }
     }
 }

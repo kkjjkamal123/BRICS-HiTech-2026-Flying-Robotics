@@ -7,15 +7,37 @@ import SwiftUI
 
 struct MissionControlView: View {
     var body: some View {
-        Page(section: .mission, trailing: SourceBadge().eraseToAnyView()) {
-            SplitColumns {
+        let layout = Appearance.shared.missionLayout
+        Page(section: .mission, trailing: HStack(spacing: 12) { LayoutPicker(); SourceBadge() }.eraseToAnyView()) {
+            switch layout {
+            case .split:
+                SplitColumns {
+                    CameraCard()
+                    LiveMapCard()
+                }
+                TelemetryRail()
+                SplitColumns(height: 268) {
+                    DetectionsCard()
+                    AltitudeCard()
+                }
+            case .video:
                 CameraCard()
+                    .containerRelativeFrame(.vertical) { h, _ in max(360, h * 0.62) }
+                TelemetryRail()
+                SplitColumns {
+                    LiveMapCard()
+                    DetectionsCard()
+                }
+                AltitudeCard().frame(height: 240)
+            case .map:
                 LiveMapCard()
-            }
-            TelemetryRail()
-            SplitColumns(height: 268) {
-                DetectionsCard()
-                AltitudeCard()
+                    .containerRelativeFrame(.vertical) { h, _ in max(360, h * 0.62) }
+                TelemetryRail()
+                SplitColumns {
+                    CameraCard()
+                    DetectionsCard()
+                }
+                AltitudeCard().frame(height: 240)
             }
             MissionLogCard()
             ConsolePanel(height: 260)
@@ -59,6 +81,21 @@ private struct SplitColumns: Layout {
             subviews[1].place(at: CGPoint(x: bounds.minX + c.left + spacing, y: bounds.minY),
                               proposal: ProposedViewSize(width: c.right, height: h))
         }
+    }
+}
+
+private struct LayoutPicker: View {
+    var body: some View {
+        Picker("Layout", selection: Binding(
+            get: { Appearance.shared.missionLayout },
+            set: { v in withAnimation(.smooth(duration: 0.4)) { Appearance.shared.missionLayout = v } })) {
+            ForEach(MissionLayout.allCases) { l in
+                Image(systemName: l.symbol).help("\(l.title) layout").tag(l)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
     }
 }
 
@@ -206,10 +243,12 @@ private struct CommandBar: View {
         .padding(.trailing, 12)
         .frame(height: 62)
         .background {
+            let glass = Appearance.shared.glass
             RoundedRectangle(cornerRadius: 16)
-                .fill(Theme.panelRaised)
-                .shadow(color: .black.opacity(0.45), radius: 18, y: 6)
+                .fill(glass ? Color.black.opacity(0.6) : Theme.panelRaised)
+                .shadow(color: .black.opacity(glass ? 0.25 : 0.45), radius: 18, y: 6)
         }
+        .glassEffect(Appearance.shared.glass ? .regular : .identity, in: .rect(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.hairlineStrong))
     }
 }
@@ -831,13 +870,12 @@ private struct TelemetryRail: View {
             RailCell(title: "Fires", symbol: "flame",
                      value: s == nil ? nil : "\(fires)", unit: nil,
                      footnote: objects == 1 ? "1 object confirmed" : "\(objects) objects confirmed",
-                     tint: fires > 0 ? Theme.accent : Theme.textPrimary)
+                     tint: fires > 0 ? Theme.fire : Theme.textPrimary)
             RailDivider()
             FlightTimeCell(log: s?.log ?? [], phase: s?.phase ?? "")
         }
         .frame(height: 92)
-        .background(Theme.panel, in: .rect(cornerRadius: Theme.radius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.hairline))
+        .surface(cornerRadius: Theme.radius)
     }
 
     private func batteryTint(_ v: Double?) -> Color {

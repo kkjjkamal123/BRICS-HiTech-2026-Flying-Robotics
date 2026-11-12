@@ -4,33 +4,36 @@ import SwiftUI
 
 enum Theme {
     // neutrals
-    static let canvas = Color(hex: 0x0A0B0D)
-    static let panel = Color(hex: 0x121418)
-    static let panelRaised = Color(hex: 0x181B20)
-    static let well = Color(hex: 0x0D0F12)
-    static let hairline = Color.white.opacity(0.075)
+    private static var glass: Bool { Appearance.shared.glass }
+    static var canvas: Color { glass ? .clear : Color(hex: 0x0A0B0D) }
+    static var panel: Color { glass ? Color(hex: 0x15181D, opacity: 0.55) : Color(hex: 0x121418) }
+    static var panelRaised: Color { glass ? Color(hex: 0x1C2027, opacity: 0.72) : Color(hex: 0x181B20) }
+    static var well: Color { glass ? Color.black.opacity(0.32) : Color(hex: 0x0D0F12) }
+    static var hairline: Color { Color.white.opacity(glass ? 0.12 : 0.075) }
     static let hairlineStrong = Color.white.opacity(0.14)
     static let textPrimary = Color(hex: 0xEDEFF2)
     static let textSecondary = Color(hex: 0x9097A3)
-    static let textTertiary = Color(hex: 0x5C636E)
+    static var textTertiary: Color { glass ? Color(hex: 0x8A919C) : Color(hex: 0x5C636E) }
 
-    // the one accent
-    static let accent = Color(hex: 0xFF6A1F)
+    static var accent: Color { Appearance.shared.theme.accent }
+    /// Text on an accent fill: dark on the near-white Graphite accent.
+    static var onAccent: Color { Appearance.shared.theme == .graphite ? Color(hex: 0x111317) : .white }
     // status
     static let ok = Color(hex: 0x32D74B)
     static let caution = Color(hex: 0xFFD60A)
     static let critical = Color(hex: 0xFF453A)
     // data lines (cool, low saturation - never competes with the accent)
-    static let signal = Color(hex: 0x8FB4E8)
+    static var signal: Color { Appearance.shared.theme.signal }
 
     // legacy names used across views -> mapped onto the restrained palette
-    static let fire = accent
+    /// Flame colour for detections: fixed, so a fire never looks like a theme accent.
+    static let fire = Color(hex: 0xFF6A1F)
     static let ember = critical
-    static let sky = signal
+    static var sky: Color { signal }
     static let mint = ok
     static let gold = caution
     static let violet = Color(hex: 0xB4B9C2)
-    static let teal = signal
+    static var teal: Color { signal }
 
     static let radius: CGFloat = 14
     static let cardRadius: CGFloat = 14
@@ -39,7 +42,7 @@ enum Theme {
     static func color(forObject name: String) -> Color {
         switch name.lowercased() {
         case "fire", "hotspot", "tree_fire": critical   // heat: thermal network (tree_fire = heat band around a tree)
-        case "flame": accent                      // the flame lamp, seen by the camera model
+        case "flame": fire                        // the flame lamp, seen by the camera model
         case "car", "truck": signal
         case "tree": ok
         default: textSecondary
@@ -137,13 +140,32 @@ struct GlassCard<Content: View>: View {
     var padding: CGFloat = 18
     var tint: Color?
     @ViewBuilder var content: Content
+    @State private var hover = false
 
     var body: some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(Theme.panel, in: .rect(cornerRadius: Theme.radius))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.hairline))
+            .surface(cornerRadius: Theme.radius)
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.radius)
+                    .strokeBorder(LinearGradient(colors: [Theme.accent.opacity(0.45), Theme.accent.opacity(0)],
+                                                 startPoint: .topLeading, endPoint: .center))
+                    .opacity(hover ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            .onHover { h in withAnimation(.easeOut(duration: 0.2)) { hover = h } }
+    }
+}
+
+extension View {
+    /// A card surface: an opaque panel, or Liquid Glass when a glass surface is chosen.
+    func surface(cornerRadius: CGFloat, raised: Bool = false) -> some View {
+        let glass = Appearance.shared.glass
+        let fill = glass ? Color.black.opacity(raised ? 0.18 : 0.28) : (raised ? Theme.panelRaised : Theme.panel)
+        return background(fill, in: .rect(cornerRadius: cornerRadius))
+            .glassEffect(glass ? .regular : .identity, in: .rect(cornerRadius: cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(Theme.hairline))
     }
 }
 
@@ -325,7 +347,12 @@ struct Page<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.spacing) {
                 PageHeader(section: section, trailing: trailing)
-                content
+                    .modifier(Rise(index: 0))
+                Group(subviews: content) { blocks in
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { i, block in
+                        block.modifier(Rise(index: i + 1))
+                    }
+                }
             }
             .padding(.horizontal, 28)
             .padding(.top, 18)

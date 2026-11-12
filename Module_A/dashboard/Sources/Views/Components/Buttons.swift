@@ -21,7 +21,7 @@ struct PrimaryButtonStyle: ButtonStyle {
         var body: some View {
             configuration.label
                 .font(.system(size: large ? 13.5 : 12.5, weight: .semibold))
-                .foregroundStyle(.white.opacity(enabled ? 1 : 0.55))
+                .foregroundStyle((color == Theme.accent ? Theme.onAccent : .white).opacity(enabled ? 1 : 0.55))
                 .padding(.horizontal, large ? 16 : 12)
                 .frame(height: large ? 34 : 28)
                 .background {
