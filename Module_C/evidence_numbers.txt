@@ -1,0 +1,60 @@
+BASE
+capex 3,500,000 opex1 1,400,000 benefits 5,200,000
+benefit items {'S1': '1,800,000', 'S2': '400,000', 'S3': '3,000,000'}
+year 1 benefit 3,120,000 opex 1,400,000 resid 0 cf 1,720,000 dcf 1,457,627
+year 2 benefit 5,200,000 opex 1,498,000 resid 0 cf 3,702,000 dcf 2,658,719
+year 3 benefit 5,200,000 opex 1,602,860 resid 0 cf 3,597,140 dcf 2,189,330
+year 4 benefit 5,200,000 opex 1,715,060 resid 0 cf 3,484,940 dcf 1,797,493
+year 5 benefit 5,200,000 opex 1,835,114 resid 300,000 cf 3,664,886 dcf 1,601,955
+  cumulative y1 -1,780,000 discounted -2,042,373
+  cumulative y2 1,922,000 discounted 616,346
+  cumulative y3 5,519,140 discounted 2,805,676
+  cumulative y4 9,004,080 discounted 4,603,170
+  cumulative y5 12,668,965 discounted 6,205,125
+K1 per UAV {'a': '38,190', 'b': '11,810', 'c': '450,000', 'd': '150,000', 'e': '120,000', 'f': '130,000'} (orange pi 17,957, tr256i 20,233)
+npv 6,205,125 irr 74.1 % pb 1.48 years dpb 1.77 years roi 362.0 % pi 2.77
+breakeven fires/yr 0.52  breakeven benefit level 57.2 %  cash-only breakeven patrol hours/yr 85.8
+
+CASH-ONLY
+year 1 benefit 1,320,000 opex 1,400,000 cf -80,000
+year 2 benefit 2,200,000 opex 1,498,000 cf 702,000
+year 3 benefit 2,200,000 opex 1,602,860 cf 597,140
+year 4 benefit 2,200,000 opex 1,715,060 cf 484,940
+year 5 benefit 2,200,000 opex 1,835,114 cf 664,886
+npv -2,159,439 irr -10.3 % pb not within 5 years roi -32.3 %
+
+SCENARIOS
+Base case (team model) | 6,205,125 | 74.1 % | 1.48 years | 1.77 years
+S-1 Cash savings only (no avoided damage) | -2,159,439 | -10.3 % | not within 5 years | not within 5 years
+S-2 One early detection per year | 2,022,843 | 38.4 % | 2.23 years | 2.96 years
+S-3 Three early detections per year | 10,387,407 | 105.9 % | 1.17 years | 1.34 years
+All benefits $-30\,\%$ | 1,855,552 | 36.8 % | 2.28 years | 3.06 years
+OPEX $+30\,\%$ | 4,727,749 | 61.7 % | 1.68 years | 2.03 years
+CAPEX $+30\,\%$ | 5,155,125 | 56.1 % | 1.76 years | 2.20 years
+Discount rate 23\,\% (+5 pp) | 5,102,709 | 74.1 % | 1.48 years | 1.86 years
+
+TORNADO
+Avoided fire damage (3.0 M RUB/yr) lo 4,532,212 hi 7,878,038
+Aircraft patrol saving (1.8 M RUB/yr) lo 5,201,377 hi 7,208,872
+Operating cost (1.40 M RUB/yr) lo 5,220,208 hi 7,190,042
+Capital cost (3.50 M RUB) lo 5,505,125 hi 6,905,125
+Discount rate (18 %) lo 5,391,036 hi 7,139,807
+
+TCO (5 yr, nominal / PV@18%)
+Baseline capex 0 own_opex 0 services 22,000,000 resale 0 total 22,000,000 pv 13,759,552
+   yearly 4,400,000 4,400,000 4,400,000 4,400,000 4,400,000
+Option A ours capex 3,500,000 own_opex 8,051,035 services 11,880,000 resale 300,000 total 23,131,035 pv 15,918,992
+   yearly 4,480,000 3,698,000 3,802,860 3,915,060 3,735,114
+Option B COTS capex 2,026,939 own_opex 12,651,626 services 11,880,000 resale 112,694 total 26,445,870 pv 17,341,852
+   yearly 5,280,000 4,554,000 4,718,780 4,895,095 4,971,057
+saving A vs baseline -1,131,035 (-5.1 %) pv -2,159,439
+saving B vs baseline -4,445,870 (-20.2 %)
+A vs B 3,314,836 (12.5 %)
+optB capex 2,026,939  m3t unit 563,469  opexB 2,200,000
+
+RETROFIT capex 2,060,000 npv 7,645,125 irr 122.3 % pb 1.09 years | cash-only npv -719,439 irr 4.1 % pb 4.54 years
+
+REGION
+districts 1 capex 3,500,000 npv 6,205,125 irr 74.1 % pb 1.48 years | cash-only npv -2,159,439 pb not within 5 years
+districts 3 capex 8,100,000 npv 21,015,374 irr 95.4 % pb 1.26 years | cash-only npv -4,078,317 pb not within 5 years
+districts 10 capex 24,200,000 npv 72,851,248 irr 105.6 % pb 1.19 years | cash-only npv -10,794,391 pb not within 5 years
