@@ -364,9 +364,14 @@ final class MissionClient {
             history.append(TelemetrySample(time: .now, altitude: p.z, fps: s.fps?["thermal"] ?? s.fps?["rgb"]))
             if history.count > 400 { history.removeFirst(history.count - 400) }
         }
+        var fresh: MissionDetection?
         for d in s.detections ?? [] where !knownDetections.contains(d.stableID) {
             knownDetections.insert(d.stableID)
-            newDetectionAlert = d
+            fresh = d
+        }
+        if let fresh {
+            newDetectionAlert = fresh
+            Alerts.detection(fresh)        // once per update, even when joining a mission with many objects
         }
     }
 

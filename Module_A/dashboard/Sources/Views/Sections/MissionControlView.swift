@@ -45,7 +45,7 @@ struct MissionControlView: View {
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             CommandBar()
-                .padding(.horizontal, 28)
+                .padding(.horizontal, Theme.pageInset)
                 .padding(.bottom, 14)
                 .padding(.top, 6)
                 .frame(maxWidth: 1640)
@@ -120,7 +120,7 @@ private struct SourceBadge: View {
 
 // MARK: - Mission phase model
 
-private enum MissionPhase {
+enum MissionPhase {
     static let steps = ["WAITING", "TAKEOFF", "MISSION", "INSPECT", "RETURN", "LAND", "DONE"]
 
     /// Index of the timeline step for a phase reported by the mission, nil when it is not on the timeline.
@@ -129,7 +129,7 @@ private enum MissionPhase {
         case "WAITING", "IDLE", "PREFLIGHT", "STARTING": 0
         case "TAKEOFF": 1
         case "MISSION": 2
-        case "INSPECT": 3
+        case "INSPECT", "SNAPSHOT": 3          // SNAPSHOT: holding position to photograph a source
         case "RETURN": 4
         case "LAND", "ABORT": 5
         case "REPORT", "DONE": 6
@@ -147,7 +147,7 @@ private enum MissionPhase {
     }
 
     static func isAirborne(_ phase: String) -> Bool {
-        ["TAKEOFF", "MISSION", "INSPECT", "RETURN", "LAND"].contains(phase.uppercased())
+        ["TAKEOFF", "MISSION", "INSPECT", "SNAPSHOT", "RETURN", "LAND"].contains(phase.uppercased())
     }
 
     static func isFinished(_ phase: String) -> Bool {
@@ -218,7 +218,7 @@ private struct CommandBar: View {
                 }
                 Button { model.command(.returnHome) } label: { Label("Return Home", systemImage: "house") }
                     .buttonStyle(.secondaryLarge)
-                    .disabled(direct ? false : (!connected || (known && !["TAKEOFF", "MISSION", "INSPECT"].contains(phase.uppercased()))))
+                    .disabled(direct ? false : (!connected || (known && !["TAKEOFF", "MISSION", "INSPECT", "SNAPSHOT"].contains(phase.uppercased()))))
                     .help(direct ? "No mission link: tells the mission script on the drone over SSH to fly home and land"
                                  : "Fly back to the home pad and land (⇧⌘H)")
                 Button { model.command(.land) } label: { Label("Land", systemImage: "arrow.down.to.line") }
@@ -526,6 +526,7 @@ private struct ThermalPane: View {
 /// The only view that reads `frame` (≈ 6 Hz).
 private struct CameraFrameLayer: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(Pref.reticle) private var reticle = true
 
     var body: some View {
         let m = model.mission
@@ -539,10 +540,10 @@ private struct CameraFrameLayer: View {
                 .saturation(m.videoLive ? 1 : 0)
                 .overlay {
                     if m.videoLive {
-                        Reticle()
+                        if reticle { Reticle()
                             .stroke(Color.white.opacity(0.32), lineWidth: 1)
                             .frame(width: 44, height: 44)
-                            .allowsHitTesting(false)
+                            .allowsHitTesting(false) }
                     } else {
                         NoSignal(title: "Signal lost", detail: "Showing the last frame received")
                     }
@@ -598,6 +599,7 @@ private struct Reticle: Shape {
 /// Corner chips over the image. Reads status (~2 Hz), never the frame.
 private struct CameraHUD: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(Pref.videoTelemetry) private var telemetry = true
 
     var body: some View {
         let m = model.mission
@@ -626,7 +628,7 @@ private struct CameraHUD: View {
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 6) {
-                    ForEach(fps, id: \.key) { cam, v in
+                    ForEach(telemetry ? fps : [], id: \.key) { cam, v in
                         HUDChip {
                             Text(cam == "rgb" ? "RGB" : cam.capitalized).foregroundStyle(.white.opacity(0.6))
                             Text(String(format: "%.0f", v)).foregroundStyle(v >= 10 ? Theme.textPrimary : Theme.caution)
@@ -637,7 +639,7 @@ private struct CameraHUD: View {
             }
             Spacer(minLength: 8)
             HStack(alignment: .bottom) {
-                if let p = s?.position {
+                if telemetry, let p = s?.position {
                     HUDChip {
                         Text("Alt").foregroundStyle(.white.opacity(0.6))
                         Text(String(format: "%.2f", p.z)).foregroundStyle(Theme.textPrimary)
@@ -645,7 +647,7 @@ private struct CameraHUD: View {
                     }
                 }
                 Spacer(minLength: 8)
-                if let p = s?.position {
+                if telemetry, let p = s?.position {
                     HUDChip {
                         Text("X").foregroundStyle(.white.opacity(0.6))
                         Text(String(format: "%.2f", p.x)).foregroundStyle(Theme.textPrimary)
@@ -776,6 +778,7 @@ private struct HUDChip<Content: View>: View {
 
 private struct LiveMapCard: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(Pref.mapLabels) private var mapLabels = true
 
     var body: some View {
         let s = model.mission.status
@@ -792,6 +795,7 @@ private struct LiveMapCard: View {
                              MapObject(id: $0.stableID, label: $0.mapLabel, name: $0.name,
                                        x: $0.x ?? 0, y: $0.y ?? 0, time: $0.time)
                          },
+                         showLabels: mapLabels,
                          arena: model.arena)
                 .overlay {
                     if s == nil {

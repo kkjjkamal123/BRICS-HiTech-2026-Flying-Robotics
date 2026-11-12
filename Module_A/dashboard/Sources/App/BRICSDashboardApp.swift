@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct BRICSDashboardApp: App {
     @State private var model = AppModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
         WindowGroup("BRICS Dashboard", id: "main") {
@@ -10,7 +11,11 @@ struct BRICSDashboardApp: App {
                 .environment(model)
                 .focusEffectDisabled()
                 .frame(minWidth: 1180, minHeight: 760)
-                .task { model.start() }
+                .task {
+                    appDelegate.model = model
+                    model.start()
+                    if Pref.bool(Pref.alertNotify, true) { Alerts.requestPermission() }
+                }
         }
         .defaultSize(width: 1480, height: 920)
         .windowResizability(.contentMinSize)
@@ -37,15 +42,7 @@ struct BRICSDashboardApp: App {
         }
 
         Settings {
-            TabView {
-                Tab("Drone", systemImage: "antenna.radiowaves.left.and.right") {
-                    SettingsView().environment(model)
-                }
-                Tab("Appearance", systemImage: "paintpalette") {
-                    AppearanceSettings()
-                }
-            }
-            .frame(width: 600, height: 760)
+            SettingsWindow().environment(model)
         }
     }
 }

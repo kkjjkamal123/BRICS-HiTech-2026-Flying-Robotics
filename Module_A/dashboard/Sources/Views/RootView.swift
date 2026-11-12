@@ -233,10 +233,12 @@ private struct ActivityField: View {
 
 private struct DetectionToast: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(Pref.alertBanner) private var banner = true
+    @AppStorage(Pref.alertSeconds) private var seconds = 5.0
 
     var body: some View {
         ZStack {
-            if let d = model.mission.newDetectionAlert {
+            if banner, let d = model.mission.newDetectionAlert {
                 HStack(spacing: 12) {
                     Image(systemName: Theme.symbol(forObject: d.name))
                         .font(.system(size: 14, weight: .bold))
@@ -261,7 +263,7 @@ private struct DetectionToast: View {
                 .padding(.top, 12)
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .task(id: d.stableID) {
-                    try? await Task.sleep(for: .seconds(5))
+                    try? await Task.sleep(for: .seconds(seconds))
                     model.mission.dismissAlert()
                 }
             }

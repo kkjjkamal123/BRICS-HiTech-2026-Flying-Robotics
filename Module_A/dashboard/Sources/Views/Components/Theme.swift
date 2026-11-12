@@ -37,7 +37,9 @@ enum Theme {
 
     static let radius: CGFloat = 14
     static let cardRadius: CGFloat = 14
-    static let spacing: CGFloat = 16
+    static var spacing: CGFloat { Appearance.shared.compact ? 10 : 16 }
+    static var cardPadding: CGFloat { Appearance.shared.compact ? 13 : 18 }
+    static var pageInset: CGFloat { Appearance.shared.compact ? 18 : 28 }
 
     static func color(forObject name: String) -> Color {
         switch name.lowercased() {
@@ -77,7 +79,7 @@ enum Theme {
 
     static func color(forPhase phase: String) -> Color {
         switch phase.uppercased() {
-        case "INSPECT": accent
+        case "INSPECT", "SNAPSHOT": accent
         case "DONE": ok
         case "LAND", "RETURN", "ABORT": caution
         case "OFFLINE", "INIT": textTertiary
@@ -105,7 +107,8 @@ extension Color {
 enum BatteryLevel {
     static func tint(_ percent: Double?) -> Color {
         guard let percent else { return Theme.textPrimary }
-        return percent < 20 ? Theme.critical : percent < 35 ? Theme.caution : Theme.ok
+        let critical = Pref.double(Pref.batteryCritical, 20), caution = Pref.double(Pref.batteryCaution, 35)
+        return percent < critical ? Theme.critical : percent < caution ? Theme.caution : Theme.ok
     }
     static func symbol(_ percent: Double?) -> String {
         guard let percent else { return "battery.0percent" }
@@ -137,7 +140,7 @@ struct BatteryBadge: View {
 }
 
 struct GlassCard<Content: View>: View {
-    var padding: CGFloat = 18
+    var padding: CGFloat = Theme.cardPadding
     var tint: Color?
     @ViewBuilder var content: Content
     @State private var hover = false
@@ -354,9 +357,9 @@ struct Page<Content: View>: View {
                     }
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, Theme.pageInset)
             .padding(.top, 18)
-            .padding(.bottom, 28)
+            .padding(.bottom, Theme.pageInset)
             .frame(maxWidth: 1640)
             .frame(maxWidth: .infinity)
         }

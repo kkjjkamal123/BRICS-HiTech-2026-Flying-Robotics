@@ -6,7 +6,13 @@ import SwiftUI
 @MainActor
 @Observable
 final class AppModel {
-    var section: AppSection = .overview
+    var section: AppSection = .overview {
+        didSet { UserDefaults.standard.set(section.rawValue, forKey: Pref.lastSection) }
+    }
+    private var awakeActivity: NSObjectProtocol?
+    private var autoRecording = false
+    private var wasLinked = false
+    private var wasAirborne = false
 
     let settings = DashboardSettings()
     /// Scan area, boundary, altitude, line spacing, fire temperature: sent to every mission run as --set.
@@ -42,6 +48,10 @@ final class AppModel {
         aiModel = AIModelStore(root: root)
         if let arg = UserDefaults.standard.string(forKey: "initialSection"), let s = AppSection(rawValue: arg) {
             section = s
+        } else {
+            let pick = Pref.string(Pref.launchSection, "last")
+            let raw = pick == "last" ? UserDefaults.standard.string(forKey: Pref.lastSection) : pick
+            if let raw, let s = AppSection(rawValue: raw) { section = s }
         }
         applyMissionSource()
         showMissionSettings = UserDefaults.standard.bool(forKey: "openMissionSettings")   // `-openMissionSettings YES`
@@ -190,8 +200,35 @@ final class AppModel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 self?.checkFinishedFlights()
+                self?.applyFlightPreferences()
             }
         }
+    }
+
+    /// Keep-awake, auto-record and the link-lost alert, checked on the same 2 s tick as finished flights.
+    private func applyFlightPreferences() {
+        let linked = mission.connected
+        let airborne = linked && MissionPhase.isAirborne(mission.phase)
+        let wantAwake = linked && Pref.bool(Pref.keepAwake, true)
+        if wantAwake, awakeActivity == nil {
+            awakeActivity = ProcessInfo.processInfo.beginActivity(options: [.idleDisplaySleepDisabled, .userInitiated],
+                                                                  reason: "Live drone mission")
+        } else if !wantAwake, let a = awakeActivity {
+            ProcessInfo.processInfo.endActivity(a)
+            awakeActivity = nil
+        }
+        if airborne, Pref.bool(Pref.autoRecord, false), !recorder.isRecording {
+            recorder.start(root: settings.toolkitRoot)
+            autoRecording = recorder.isRecording
+        }
+        // stop only once the flight is really over: a Wi-Fi drop mid-flight must not split the recording
+        if autoRecording, linked, MissionPhase.isFinished(mission.phase) {
+            if recorder.isRecording { recorder.stop() }
+            autoRecording = false
+        }
+        if wasLinked, !linked, wasAirborne { Alerts.linkLost() }
+        wasLinked = linked
+        wasAirborne = airborne
     }
 
     private func checkFinishedFlights() {

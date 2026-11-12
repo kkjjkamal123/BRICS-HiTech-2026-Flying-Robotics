@@ -84,6 +84,7 @@ final class Appearance: @unchecked Sendable {
     var missionLayout: MissionLayout { didSet { save(missionLayout.rawValue, "missionLayout") } }
     var animatedBackground: Bool { didSet { save(animatedBackground, "animatedBackground") } }
     var pageAnimations: Bool { didSet { save(pageAnimations, "pageAnimations") } }
+    var compact: Bool { didSet { save(compact, "compact") } }
 
     var glass: Bool { surface != .solid }
 
@@ -94,6 +95,7 @@ final class Appearance: @unchecked Sendable {
         missionLayout = MissionLayout(rawValue: d.string(forKey: "missionLayout") ?? "") ?? .split
         animatedBackground = d.object(forKey: "animatedBackground") as? Bool ?? true
         pageAnimations = d.object(forKey: "pageAnimations") as? Bool ?? true
+        compact = d.bool(forKey: "compact")
     }
 
     private func save(_ value: Any, _ key: String) { UserDefaults.standard.set(value, forKey: key) }
@@ -302,6 +304,15 @@ struct AppearanceSettings: View {
                             }
                         }
                     }
+                }
+                group("Density") {
+                    Picker("Density", selection: Binding(get: { a.compact }, set: { v in set(\.compact, v) })) {
+                        Text("Comfortable").tag(false)
+                        Text("Compact").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 260)
                 }
                 group("Motion") {
                     VStack(alignment: .leading, spacing: 8) {
